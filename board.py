@@ -1,7 +1,30 @@
 import ipdb
 import random
+import jsonpickle
 from custom_exceptions import GameEndedError, InvalidGametypeError, InvalidOperationError
 from constants import *
+
+
+class Serializer:
+    @classmethod
+    def get_game_object():
+        """
+        Class method for deserializing the game object from a json file
+        Returns:
+            game_object - GameState object holding all information needed to play game
+        """
+        with open("data.json", "r") as f:
+            game_object = jsonpickle.decode(f.read())
+        return game_object
+
+    def save_game_object(game_object):
+        """
+        Class method for serializing game object to a json file
+        Args:
+            game_object - GameState object holding all information needed to play game
+        """
+        with open("data.json", "w+") as f:
+            f.write(jsonpickle.encode(game_object))
 
 
 class Validator:
@@ -157,7 +180,7 @@ class CardState:
 
     def discard_city_cards(self, city_cards):
         """
-        Takes array of city cards and puts them in the discard pile. Cards are prepended to 
+        Takes array of city cards and puts them in the discard pile. Cards are prepended to
         city card discard deck, although this shouldn't really ever be relevant
         Args:
             city_cards: array of city cards to discard
@@ -166,7 +189,7 @@ class CardState:
 
     def draw_infection_cards(self, number=2):
         """
-        Removes InfectionCards from top of InfectionCard deck. Adds these to discard pile, 
+        Removes InfectionCards from top of InfectionCard deck. Adds these to discard pile,
         since they won't be added to anyone's hand.
         Returns:
             InfectionCards - array of drawn infection cards
@@ -332,15 +355,30 @@ class GameState:
     def __init__(self):
         self.infection_state = InfectionState()
         self.disease_state = DiseaseState()
+        self.card_state = CardState()
+        self.cities = self.init_cities()
+
+    def init_cities(self):
+        """
+        Using cities and connected cities information from constants file,
+        creates a dict holding all cities with all of their related data
+        Returns: 
+            cities - dict associating city names to city objects for all 48 cities
+        """
+        cities = {c: City(c, CITY_LIST[c]) for c in CITY_LIST.keys()}
+        for city in cities.values():
+            city.set_connected_cities(CITY_CONNECTIONS[city.name])
+        cities["Atlanta"].add_research_station()
+        return cities
 
 
 class Board:
     """
-    Holds game state list of cities and players(with their positions)
+    Holds game state, list of cities, and players (with their positions)
     etc
     """
 
-    def __init__(self, num_players):
+    def __init__(self, num_players, game_id, player_ids):
         # set up decks of cards and discard piles
         # set up players
         self.players = [
@@ -493,28 +531,3 @@ class City:
             self.has_research_station = True
             return True
         return False
-
-
-city_connections = {
-    "San Francisco": ["Chicago", "Tokyo", "Manila", "Los Angeles"],
-    "Chicago": ["San Francisco", "Los Angeles", "Mexico City", "Atlanta", "Montreal"],
-    "Los Angeles": ["Sydney", "Chicago", "San Francisco", "Mexico City"],
-    "Mexico City": ["Bogota", "Lima", "Miami", "Los Angeles", "Chicago"],
-    "Atlanta": ["Miami", "Washington", "Chicago"],
-    "Montreal": ["Chicago", "New York", "Washington"],
-    "Miami": ["Bogota", "Washington", "Atlanta"],
-    "Washington": ["New York", "Atlana", "Miami"],
-    "New York": ["London", "Madrid", "Montreal", "Washington"]
-}
-
-# cities = [
-#     City("San Francisco", "blue", city_connections["San Francisco"]),
-#     City("Chicago", "blue", city_connections["Chicago"]),
-#     City("Mexico City", "yellow", city_connections["Mexico City"]),
-#     City("Los Angeles", "yellow", city_connections["Los Angeles"]),
-#     City("Atlanta", "blue", city_connections["Atlanta"]),
-#     City("Montreal", "blue", city_connections["Montreal"]),
-#     City("Miami", "yellow", city_connections["Miami"]),
-#     City("Washington", "blue", city_connections["Washington"]),
-#     City("New York", "blue", city_connections["New York"])
-# ]
