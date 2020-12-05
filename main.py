@@ -1,6 +1,7 @@
 from flask import render_template, redirect, g, Flask, request, url_for, session
 from sqlite3 import dbapi2 as sqlite3
 from os import path
+import json
 import requests
 app = Flask(__name__)
 
@@ -24,5 +25,21 @@ def get_db():
     # Make sure database has tables
     return db
 
+
+@app.teardown_appcontext
+def close_connection(exception):
+    db = getattr(g, '_database', None)
+    if db is not None:
+        db.close()
+
+
+@app.route('/', methods=["GET"])
+def base():
+    return json.dumps({
+        "success" : True
+    })
+    # if not session.get('logged_in'):
+    #     return redirect("/login")
+    # return redirect("/home")
 
 
