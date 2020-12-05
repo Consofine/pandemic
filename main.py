@@ -1,4 +1,4 @@
-from flask import render_template, redirect, g, Flask, request, url_for, session
+from flask import render_template, redirect, g, Flask, request, url_for, session, jsonify
 from sqlite3 import dbapi2 as sqlite3
 from os import path
 import json
@@ -7,6 +7,11 @@ app = Flask(__name__)
 
 
 app.config.from_pyfile('config.py')
+
+def cursor_to_dict_array(cur):
+    columns = [column[0] for column in cur.description]
+    return [dict(zip(columns, row)) for row in cur.fetchall()]
+
 
 
 def get_db():
@@ -32,6 +37,53 @@ def close_connection(exception):
     if db is not None:
         db.close()
 
+
+@app.route("/game/end", methods=['PUT'])
+def end_game():
+    session.pop('game_started', None)
+
+    return jsonify({
+        "success": True
+    })
+
+
+@app.route('/game', methods=["POST"])
+def create_game():
+    if session.get('game_started'):
+        return jsonify({
+            "error" : "Game already started!"
+        }), 400
+
+
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute(
+        'insert into players (player_id) values (?)',
+        (
+            '1'
+        )
+    )
+    project_id = cursor.lastrowid
+    db.commit()
+    db.close()
+
+    session['game_started'] = True
+
+
+    return jsonify({
+        "success" : True
+    })
+
+
+@app.route('/game', methods=["GET"])
+def fetch_games():
+    db = get_db()
+    cursor = db.cursor()
+    cur = db.execute('select * from players')
+    entries = cursor_to_dict_array(cur)
+    return jsonify({
+        'entries' : entries
+    })
 
 @app.route('/', methods=["GET"])
 def base():
