@@ -35,6 +35,9 @@ def close_connection(exception):
 
 @app.route('/', methods=["GET"])
 def base():
+    db = get_db()
+
+
     return json.dumps({
         "success" : True
     })
