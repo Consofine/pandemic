@@ -5,6 +5,15 @@ import json
 import requests
 app = Flask(__name__)
 
+# Import game logic here
+
+
+valid_moves = [
+    'MOVE_ADJ',
+    'MOVE_DIRECT',
+    'MOVE_CHARTER',
+    'MOVE_SHUTTLE'
+]
 
 app.config.from_pyfile('config.py')
 
@@ -44,6 +53,32 @@ def end_game():
 
     return jsonify({
         "success": True
+    })
+
+
+
+@app.route('/game/move', methods=['PUT'])
+def game_move():
+    if not session.get('game_started'):
+        return jsonify({
+            "error" : "There is no game yet!"
+        }), 400
+    if 'move' not in request.json:
+        return jsonify({
+            "error" : "No move passed!"
+        }), 400
+    move = request.json['move']
+    if move not in valid_moves:
+        return jsonify({
+            "error" : "{} is an invalid move".format(move)
+        }), 400
+
+
+    # Handle the move with the expected parameter 
+
+
+    return jsonify({
+        'success' : True
     })
 
 
