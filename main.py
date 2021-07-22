@@ -3,15 +3,17 @@ from sqlite3 import dbapi2 as sqlite3
 from os import path
 import json
 import requests
+from util import generate_id
+
 app = Flask(__name__)
 
 
 app.config.from_pyfile('config.py')
 
+
 def cursor_to_dict_array(cur):
     columns = [column[0] for column in cur.description]
     return [dict(zip(columns, row)) for row in cur.fetchall()]
-
 
 
 def get_db():
@@ -51,9 +53,8 @@ def end_game():
 def create_game():
     if session.get('game_started'):
         return jsonify({
-            "error" : "Game already started!"
+            "error": "Game already started!"
         }), 400
-
 
     db = get_db()
     cursor = db.cursor()
@@ -69,9 +70,8 @@ def create_game():
 
     session['game_started'] = True
 
-
     return jsonify({
-        "success" : True
+        "success": True
     })
 
 
@@ -82,19 +82,22 @@ def fetch_games():
     cur = db.execute('select * from players')
     entries = cursor_to_dict_array(cur)
     return jsonify({
-        'entries' : entries
+        'entries': entries
     })
+
 
 @app.route('/', methods=["GET"])
 def base():
     db = get_db()
 
-
     return json.dumps({
-        "success" : True
+        "success": True
     })
+
+
+@app.route('/game/<id>', methods=["GET"])
+def fetch_game():
+    print("hi")
     # if not session.get('logged_in'):
     #     return redirect("/login")
     # return redirect("/home")
-
-

@@ -7,6 +7,7 @@ MAX_DISEASE_COUNT = 3
 DISEASE_CUBE_LIMIT = 24
 MAX_ACTIONS = 4
 MAX_OUTBREAK_COUNT = 8
+STARTING_CITY = "Atlanta"
 CITY_LIST = {
     "San Francisco": BLUE,
     "Chicago": BLUE,

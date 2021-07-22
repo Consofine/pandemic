@@ -7,23 +7,24 @@ from constants import *
 
 class Serializer:
     @classmethod
-    def get_game_object():
+    def get_game_object(id):
         """
         Class method for deserializing the game object from a json file
         Returns:
             game_object - GameState object holding all information needed to play game
         """
-        with open("data.json", "r") as f:
+        with open("game-{}.json".format(id), "r") as f:
             game_object = jsonpickle.decode(f.read())
         return game_object
 
-    def save_game_object(game_object):
+    @classmethod
+    def save_game_object(game_object, id):
         """
         Class method for serializing game object to a json file
         Args:
             game_object - GameState object holding all information needed to play game
         """
-        with open("data.json", "w+") as f:
+        with open("game-{}.json".format(id), "w+") as f:
             f.write(jsonpickle.encode(game_object))
 
 
@@ -65,12 +66,31 @@ class Role:
         self.power
 
 
+class Color:
+    """
+    Used to represent colors as an object
+    """
+
+    def __init__(self, color):
+        if color not in COLORS:
+            raise ValueError("Tried to create a Color without a valid color")
+        self.color = color
+
+    def __eq__(self, other):
+        if isinstance(other, Color):
+            return self.color == other.color
+        if isinstance(other, str):
+            return self.color == other
+        return False
+
+
 class Player:
     """
     Represents one player (including location, powers, and state) from the game
     """
 
-    def __init__(self, role, starting_city):
+    def __init__(self, player_id, role, starting_city):
+        self.player_id = player_id
         self.role = role
         self.is_active = False
         self.city_cards = []
@@ -129,9 +149,163 @@ class Player:
         Returns:
             bool - true if move is successful, false otherwise
         """
-        if self.acttions_left > 0 and self.current_city.has_research_station and dest_city.has_research_station:
+        if not Validator.validate_city(dest_city):
+            raise InvalidGametypeError(City, dest_city)
+        if self.actions_left > 0 and self.current_city.has_research_station and dest_city.has_research_station:
             self.current_city = dest_city
             self.actions_left -= 1
+            return True
+        return False
+
+
+class CityCard:
+    """
+    Class to hold city and color properties
+    """
+
+    def __init__(self, city_name, color):
+        if not city_name in CITY_LIST or color not in COLORS:
+            raise ValueError("Invalid argument passed to CityCard constructor")
+        self.name = city_name
+        self.color = color
+
+    def __eq__(self, other):
+        """
+        (in)Equality based on whether cities share name
+        """
+        if not isinstance(other, City) and not isinstance(other, CityCard):
+            return False
+        return self.name == other.name
+
+
+class InfectionCard:
+    """
+    Representing the type of card that is drawn at the end of each turn and used to
+    place new infections in certain cities.
+    """
+
+    def __init__(self, city_name, color):
+        self.name = city_name
+        self.color = color
+
+    def __eq__(self, other):
+        """
+        (in)Equality based on whether cities share name
+        """
+        if not isinstance(other, City) and not isinstance(other, InfectionCard):
+            return False
+        return self.name == other.name
+
+
+class City:
+    """
+    Representing a board location and its state
+    """
+
+    def __init__(self, name, color):
+        self.name = name
+        self.color = color
+        self.disease_count = dict.fromkeys(
+            [RED, BLUE, YELLOW, GREY], 0)
+        self.has_research_station = False
+        self.connected_cities = []
+
+    def __eq__(self, other):
+        """
+        (in)Equality based on whether cities share name
+        """
+        if not isinstance(other, City) and not isinstance(other, CityCard):
+            return False
+        return self.name == other.name
+
+    def set_connected_cities(self, cities):
+        """
+        Stores list of cities cities as being adjacent to this
+        Args:
+            cities - list of cities that should be connected to this one
+        """
+        self.connected_cities = cities
+
+    def add_single_disease(self, color, prior_outbreaks=[]):
+        """
+        Adds one disease cube to this city. If this city already has MAX_DISEASE_COUNT
+        disease cubes of given color, doesn't increase this city's count but triggers
+        outbreak in neighboring cities
+        Args:
+            color - color of disease to increase here
+            prior_outbreaks - (OPT) array used to track that this city has been hit
+        Returns:
+            bool - true if outbreak triggered, false otherwise
+        """
+        if self.disease_count[color] < MAX_DISEASE_COUNT:
+            self.disease_count[color] += 1
+            return False
+        prior_outbreaks.append(self)
+        self.trigger_outbreak(color, prior_outbreaks)
+        return True
+
+    def add_epidemic_disease(self, color):
+        """
+        Adds three disease cubes to this city as part of an outbreak. If this city already has any
+        disease cubes of the given color, then this city's disease_count for that color is capped at
+        MAX_DISEASE_COUNT and an outbreak is triggered.
+        Args:
+            color - color of disease to add here
+        Returns:
+            bool - true if outbreak triggered, false otherwise
+        """
+        if self.disease_count[color] == 0:
+            self.disease_count[color] = MAX_DISEASE_COUNT
+            return False
+        self.disease_count[color] = MAX_DISEASE_COUNT
+        self.trigger_outbreak(color, [])
+        return True
+
+    def trigger_outbreak(self, color, prior_outbreaks):
+        """
+        Adds one disease cube of given color to each connected city. Prevents infinite loops / chaining
+        back to cities that have already been hit, but allows for chaining otherwise
+        Args:
+            color - color of disease that is outbreaking
+            prior_outbreaks - array to track cities that have been hit by this outbreak chain
+        """
+        for city in self.connected_cities:
+            if city not in prior_outbreaks:
+                city.add_single_disease(color, prior_outbreaks)
+
+    def cure_single_disease(self, color):
+        """
+        Remove a single disease cube of a given color from this city
+        Args:
+            color - color of disease to remove
+        Returns:
+            bool - true if disease successfully removed, false if no disease of given color exists here
+        """
+        if self.disease_count[color] == 0:
+            return False
+        self.disease_count[color] -= 1
+        return True
+
+    def cure_all_disease(self, color):
+        """
+        Remove all disease cubes of a given color from this city.
+        Args:
+            color - color of disease to remove
+        Returns:
+            bool - true if disease successfully removed, false if no disease of given color exists here
+        """
+        if self.disease_count[color] == 0:
+            return False
+        self.disease_count[color] = 0
+        return True
+
+    def add_research_station(self):
+        """
+        Verifies that CityCard matches this location. Adds research station if none
+        exists here already and if CityCard matches.
+        """
+        if not self.has_research_station:
+            self.has_research_station = True
             return True
         return False
 
@@ -222,11 +396,36 @@ class CardState:
         self.infection_card_discard[:0] = [bottom_card]
         return bottom_card
 
+    def handle_action(self, action, *positional_args, **keyword_args):
+        action(positional_args, keyword_args)
+
+
+class PlayerState:
+    def __init__(self, player_ids, starting_city=City(STARTING_CITY)):
+        self.active_player = None
+        self.players = [Player(p, "TODO-role", starting_city)
+                        for p in player_ids]
+        self.set_active_player(self.players[0])
+
+    def set_active_player(self, player):
+        """
+        Set the active player to be the given player object. Also, set all other
+        players' active statuses to False, and set this player's active status to True.
+        Args:
+            Player - a Player object representing the new active player
+        """
+        for p in self.players:
+            if p == player:
+                self.active_player = p
+                p.is_active = True
+            else:
+                p.is_active = False
+
 
 class InfectionState:
     """
     Object for tracking current infection level and rate. Separate from disease state, which holds
-    number of remaining diseases left for each color, as well
+    number of remaining diseases left for each color
     """
 
     def __init__(self):
@@ -352,10 +551,12 @@ class GameState:
     Object holding state information relevant to the game as a whole
     """
 
-    def __init__(self):
+    def __init__(self, game_id, player_ids):
+        self.game_id = game_id
         self.infection_state = InfectionState()
         self.disease_state = DiseaseState()
         self.card_state = CardState()
+        self.player_state = PlayerState(player_ids)
         self.cities = self.init_cities()
 
     def init_cities(self):
@@ -378,156 +579,19 @@ class Board:
     etc
     """
 
-    def __init__(self, num_players, game_id, player_ids):
-        # set up decks of cards and discard piles
-        # set up players
-        self.players = [
-            Player("TODO-role", self.city_list["Atlanta"])] * num_players
-        self.active_player = self.players[0]
+    def __init__(self, game_id, player_ids):
+        # set up game state
+        self.game_state = GameState(game_id, player_ids)
 
+    def make_action():
+        # TODO
+        return
 
-class CityCard:
-    """
-    Class to hold city and color properties
-    """
+    def use_ability():
+        # TODO
+        return
 
-    def __init__(self, city_name, color):
-        self.name = city_name
-        self.color = color
-
-    def __eq__(self, other):
-        """
-        (in)Equality based on whether cities share name
-        """
-        if not isinstance(other, City) and not isinstance(other, CityCard):
-            return False
-        return self.name == other.name
-
-
-class InfectionCard:
-    """
-    Representing the type of card that is drawn at the end of each turn and used to
-    place new infections in certain cities.
-    """
-
-    def __init__(self, city_name, color):
-        self.name = city_name
-        self.color = color
-
-    def __eq__(self, other):
-        """
-        (in)Equality based on whether cities share name
-        """
-        if not isinstance(other, City) and not isinstance(other, InfectionCard):
-            return False
-        return self.name == other.name
-
-
-class City:
-    """
-    Representing a board location and its state
-    """
-
-    def __init__(self, name, color):
-        self.name = name
-        self.disease_count = dict.fromkeys(
-            [RED, BLUE, YELLOW, GREY], 0)
-        self.has_research_station = False
-        self.connected_cities = []
-
-    def __eq__(self, other):
-        """
-        (in)Equality based on whether cities share name
-        """
-        if not isinstance(other, City) and not isinstance(other, CityCard):
-            return False
-        return self.name == other.name
-
-    def set_connected_cities(self, cities):
-        """
-        Stores list of cities cities as being adjacent to this
-        """
-        self.connected_cities = cities
-
-    def add_single_disease(self, color, prior_outbreaks=[]):
-        """
-        Adds one disease cube to this city. If this city already has MAX_DISEASE_COUNT
-        disease cubes of given color, doesn't increase this city's count but triggers
-        outbreak in neighboring cities
-        Args:
-            color - color of disease to increase here
-            prior_outbreaks - (OPT) array used to track that this city has been hit
-        Returns:
-            bool - true if outbreak triggered, false otherwise
-        """
-        if self.disease_count[color] < MAX_DISEASE_COUNT:
-            self.disease_count[color] += 1
-            return False
-        prior_outbreaks.append(self)
-        self.trigger_outbreak(color, prior_outbreaks)
-        return True
-
-    def add_epidemic_disease(self, color):
-        """
-        Adds three disease cubes to this city as part of an outbreak. If this city already has any
-        disease cubes of the given color, then this city's disease_count for that color is capped at
-        MAX_DISEASE_COUNT and an outbreak is triggered.
-        Args:
-            color - color of disease to add here
-        Returns:
-            bool - true if outbreak triggered, false otherwise
-        """
-        if self.disease_count[color] == 0:
-            self.disease_count[color] = MAX_DISEASE_COUNT
-            return False
-        self.disease_count[color] = MAX_DISEASE_COUNT
-        self.trigger_outbreak(color, [])
-        return True
-
-    def trigger_outbreak(self, color, prior_outbreaks):
-        """
-        Adds one disease cube of given color to each connected city. Prevents infinite loops / chaining
-        back to cities that have already been hit, but allows for chaining otherwise
-        Args:
-            color - color of disease that is outbreaking
-            prior_outbreaks - array to track cities that have been hit by this outbreak chain
-        """
-        for city in self.connected_cities:
-            if city not in prior_outbreaks:
-                city.add_single_disease(color, prior_outbreaks)
-
-    def cure_single_disease(self, color):
-        """
-        Remove a single disease cube of a given color from this city
-        Args:
-            color - color of disease to remove
-        Returns:
-            bool - true if disease successfully removed, false if no disease of given color exists here
-        """
-        if self.disease_count[color] == 0:
-            return False
-        self.disease_count[color] -= 1
-        return True
-
-    def cure_all_disease(self, color):
-        """
-        Remove all disease cubes of a given color from this city.
-        Args:
-            color - color of disease to remove
-        Returns:
-            bool - true if disease successfully removed, false if no disease of given color exists here
-        """
-        if self.disease_count[color] == 0:
-            return False
-        self.disease_count[color] = 0
-        return True
-
-    def add_research_station(self):
-        """
-        Verifies that CityCard matches this location. Adds research station if none
-        exists here already and if CityCard matches.
-        """
-        if not self.has_research_station:
-            self.has_research_station = True
-            return True
-        return False
+    def end_of_actions(self):
+        # draw city cards and give them to the active player
+        self.game_state.player_state.active_player.city_cards += self.game_state.card_state.draw_city_cards()
+        self.game_state.draw_infection_cards_and_place_cubes()
