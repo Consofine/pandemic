@@ -70,13 +70,13 @@ class TestCityMethods(unittest.TestCase):
         self.assertEqual(test_map.mc.disease_count[YELLOW], 1)
         self.assertEqual(test_map.mc.disease_count[BLUE], 0)
 
-    def test_cure_single_disease(self):
+    def test_treat_single_disease(self):
         test_map = TestMap()
-        self.assertFalse(test_map.chi.cure_single_disease(BLUE))
+        self.assertFalse(test_map.chi.treat_single_disease(BLUE))
         self.assertFalse(test_map.chi.add_epidemic_disease(BLUE))
-        self.assertTrue(test_map.chi.cure_single_disease(BLUE))
+        self.assertTrue(test_map.chi.treat_single_disease(BLUE))
         self.assertEqual(test_map.chi.disease_count[BLUE], 2)
-        self.assertFalse(test_map.chi.cure_single_disease(YELLOW))
+        self.assertFalse(test_map.chi.treat_single_disease(YELLOW))
 
     def test_cure_all_disease(self):
         test_map = TestMap()
