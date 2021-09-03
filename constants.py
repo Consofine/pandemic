@@ -1,12 +1,13 @@
-RED = "red"
-BLUE = "blue"
-YELLOW = "yellow"
-GREY = "grey"
+RED = "RED"
+BLUE = "BLUE"
+YELLOW = "YELLOW"
+GREY = "GREY"
 COLORS = [BLUE, RED, YELLOW, GREY]
 MAX_DISEASE_COUNT = 3
 DISEASE_CUBE_LIMIT = 24
 MAX_ACTIONS = 4
 MAX_OUTBREAK_COUNT = 8
+MAX_HAND_COUNT = 7
 MOVE_ADJACENT = "MOVE_ADJACENT"
 MOVE_DIRECT_FLIGHT = "MOVE_DIRECT_FLIGHT"
 MOVE_CHARTER_FLIGHT = "MOVE_CHARTER_FLIGHT"
@@ -16,6 +17,7 @@ TREAT_DISEASE = "TREAT_DISEASE"
 SHARE_KNOWLEDGE = "SHARE_KNOWLEDGE"
 DISCOVER_CURE = "DISCOVER_CURE"
 STARTING_CITY = "Atlanta"
+STARTING_COLOR = BLUE
 CITY_LIST = {
     "San Francisco": BLUE,
     "Chicago": BLUE,
@@ -75,10 +77,10 @@ CITY_CONNECTIONS = {
     "Atlanta": ["Miami", "Washington", "Chicago"],
     "Montreal": ["Chicago", "New York", "Washington"],
     "Miami": ["Bogota", "Washington", "Atlanta"],
-    "Washington": ["New York", "Atlana", "Miami"],
+    "Washington": ["New York", "Atlanta", "Miami"],
     "New York": ["London", "Madrid", "Montreal", "Washington"],
     "Bogota": ["Mexico City", "Miami", "Lima", "Buenos Aires", "Sao Paulo"],
-    "Lima": ["Mexico  City", "Bogota", "Santiago"],
+    "Lima": ["Mexico City", "Bogota", "Santiago"],
     "Santiago": ["Lima"],
     "Buenos Aires": ["Sao Paulo", "Bogota"],
     "Sao Paulo": ["Madrid", "Bogota", "Buenos Aires", "Lagos"],
@@ -114,7 +116,7 @@ CITY_CONNECTIONS = {
     "Beijing": ["Shanghai", "Seoul"],
     "London": ["New York", "Madrid", "Paris", "Essen"],
     "Algiers": ["Madrid", "Paris", "Istanbul", "Cairo"],
-    "Seoul": ["Beijing", "Shanghai", "Toyko"],
+    "Seoul": ["Beijing", "Shanghai", "Tokyo"],
     "Madrid": ["London", "Sao Paulo", "Paris", "New York", "Algiers"]
 
 }
