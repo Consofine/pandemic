@@ -1,6 +1,7 @@
 import sys
 sys.path.append('..')
 import unittest
+import functools
 from board import *
 from custom_exceptions import GameEndedError
 from constants import *
@@ -13,12 +14,41 @@ class TestMap():
     def get_city(self, city_name: str) -> City:
         return self.cities[city_name]
 
+    def get_city_card(self, city_name: str) -> CityCard:
+        return CityCard(city_name, CITY_LIST[city_name])
+
 
 class TestPlayer:
     @classmethod
-    def get_test_player(self):
+    def get_test_player(self) -> Player:
         cities: dict = Board.init_cities()
-        return Player("someidhere", Role(), cities[STARTING_CITY])
+        p = Player("someidhere", Role(), cities[STARTING_CITY])
+        p.add_card(CityCard("San Francisco", CITY_LIST["San Francisco"]))
+        p.add_card(CityCard("Algiers", CITY_LIST["Algiers"]))
+        p.add_card(CityCard("Karachi", CITY_LIST["Karachi"]))
+        return p
+
+    @classmethod
+    def get_second_test_player(self) -> Player:
+        cities: dict = Board.init_cities()
+        p = Player("anotheridhere", Role(), cities[STARTING_CITY])
+        p.add_card(CityCard("Atlanta", CITY_LIST["Atlanta"]))
+        p.add_card(CityCard("Osaka", CITY_LIST["Osaka"]))
+        p.add_card(CityCard("Tokyo", CITY_LIST["Tokyo"]))
+        p.add_card(CityCard("Jakarta", CITY_LIST["Jakarta"]))
+        p.add_card(CityCard("Chennai", CITY_LIST["Chennai"]))
+        return p
+
+    @classmethod
+    def get_can_cure_red_player(self) -> Player:
+        cities: dict = Board.init_cities()
+        p = Player("thisonecancure", Role(), cities[STARTING_CITY])
+        p.add_card(CityCard("Tokyo", CITY_LIST["Tokyo"]))
+        p.add_card(CityCard("Shanghai", CITY_LIST["Shanghai"]))
+        p.add_card(CityCard("Beijing", CITY_LIST["Beijing"]))
+        p.add_card(CityCard("Sydney", CITY_LIST["Sydney"]))
+        p.add_card(CityCard("Jakarta", CITY_LIST["Jakarta"]))
+        return p
 
 
 class TestCityCardDeck:
@@ -46,9 +76,9 @@ class TestCityMethods(unittest.TestCase):
 
     def test_eq(self):
         test_sf = TestMap().get_city("San Francisco")
-        self.assertEqual(test_sf, CityCard("San Francisco", BLUE))
-        self.assertNotEqual(test_sf, CityCard("San Francisco", YELLOW))
-        self.assertNotEqual(test_sf, CityCard("Tokyo", RED))
+        self.assertEqual(test_sf, CityCard(
+            "San Francisco", CITY_LIST["San Francisco"]))
+        self.assertNotEqual(test_sf, CityCard("Tokyo", CITY_LIST["Tokyo"]))
 
     def test_add_disease(self):
         test_map = TestMap()
@@ -164,14 +194,40 @@ class TestInfectionManagerMethods(unittest.TestCase):
         self.assertEqual(infection_manager.rate, 3)
         self.assertEqual(infection_manager.level, 4)
 
+    def test_infection_manager_increase_outbreak_count(self):
+        im = InfectionManager()
+        for _ in range(MAX_OUTBREAK_COUNT - 1):
+            im.increase_outbreak_count()
+        self.assertRaises(GameEndedError, im.increase_outbreak_count)
 
-class TestDiseaseStateMethods(unittest.TestCase):
+
+class TestDiseaseManagerMethods(unittest.TestCase):
     def test_init(self):
         disease_manager = DiseaseManager()
         self.assertFalse(disease_manager.is_cured(BLUE))
         self.assertFalse(disease_manager.is_eradicated(GREY))
         self.assertEqual(
             disease_manager.get_remaining_diseases(RED), DISEASE_CUBE_LIMIT)
+
+    def test_get_remaining_diseases(self):
+        dm = DiseaseManager()
+        ret = dm.get_remaining_diseases()
+        self.assertEqual(len(set(ret.values())), 1)
+        self.assertTrue(DISEASE_CUBE_LIMIT in set(ret.values()))
+        self.assertEqual(dm.get_remaining_diseases(BLUE), DISEASE_CUBE_LIMIT)
+        dm.place_disease(BLUE)
+        ret = dm.get_remaining_diseases()
+        self.assertEqual(ret[BLUE], DISEASE_CUBE_LIMIT - 1)
+        self.assertEqual(len(set(ret.values())), 2)
+
+    def test_is_cured_or_eradicated(self):
+        dm = DiseaseManager()
+        dm.cure_disease(RED)
+        self.assertTrue(dm.is_cured(RED))
+        self.assertFalse(dm.is_cured(BLUE))
+        dm.eradicate_disease(RED)
+        self.assertTrue(dm.is_eradicated(RED))
+        self.assertRaises(InvalidOperationError, dm.eradicate_disease, BLUE)
 
     def test_cure_and_eradicate(self):
         disease_manager = DiseaseManager()
@@ -255,8 +311,24 @@ class TestCardManagerMethods(unittest.TestCase):
         self.assertEqual(card_manager.infection_card_discard, [])
         self.assertEqual(card_manager.city_card_discard, [])
 
-    def test_draw_and_discard_city_cards(self):
+    def test_init_city_cards(self):
         card_manager = CardManager()
+        card_manager.init_city_cards()
+        self.assertTrue(len(card_manager.city_card_deck)
+                        == len(CITY_LIST.keys()) + MIN_NUM_EPIDEMIC_CARDS)
+        self.assertTrue(
+            len(set([c.color for c in card_manager.city_card_deck if not isinstance(c, EpidemicCard)])) == 4)
+
+    def test_init_infection_cards(self):
+        card_manager = CardManager()
+        card_manager.init_infection_cards()
+        self.assertTrue(len(card_manager.infection_card_deck)
+                        == len(CITY_LIST.keys()))
+        self.assertTrue(
+            len(set([c.color for c in card_manager.infection_card_deck])) == 4)
+
+    def test_draw_and_discard_city_cards_no_epidemics(self):
+        card_manager = CardManager(0)
         length = len(card_manager.city_card_deck)
         cards = card_manager.draw_city_cards()
         self.assertTrue(len(cards), 2)
@@ -266,6 +338,18 @@ class TestCardManagerMethods(unittest.TestCase):
         self.assertTrue(isinstance(cards[0], CityCard))
         card_manager.discard_city_cards(cards)
         self.assertEqual(cards, card_manager.city_card_discard)
+
+    def test_draw_and_discard_city_cards(self):
+        card_manager = CardManager()
+        cards = card_manager.draw_city_cards()
+        card_length = len(cards)
+        while EpidemicCard() not in cards:
+            cards = card_manager.draw_city_cards()
+            card_length += len(cards)
+        card_length += len(cards)
+        self.assertEqual(len(card_manager.infection_card_discard), 0)
+        self.assertEqual(len(card_manager.infection_card_deck),
+                         len(CITY_LIST.keys()))
 
     def test_draw_and_discard_infection_cards(self):
         card_manager = CardManager()
@@ -286,13 +370,37 @@ class TestCardManagerMethods(unittest.TestCase):
         self.assertTrue(cards[2] in card_manager.infection_card_deck)
         self.assertEqual(card_manager.infection_card_discard, [])
 
+    def test_shuffle_and_replace_infection_cards(self):
+        card_manager = CardManager()
+        infection_discards = card_manager.draw_infection_cards()
+        infection_discards.extend(card_manager.draw_infection_cards())
+        self.assertTrue(len(infection_discards) == 4)
+        self.assertTrue(functools.reduce(lambda a, b: a and b, [
+                        c not in card_manager.infection_card_deck for c in infection_discards]))
+        card_manager.shuffle_and_replace_infection_cards()
+        self.assertTrue(functools.reduce(lambda a, b: a and b, [
+                        c in card_manager.infection_card_deck[:len(infection_discards)] for c in infection_discards]))
+        while len(card_manager.infection_card_deck) > 0:
+            card_manager.draw_infection_cards()
+        infection_discards = card_manager.draw_infection_cards()
+        self.assertEqual(len(infection_discards), 2)
+
+    def test_draw_bottom_infection_card(self):
+        card_manager = CardManager()
+        bottom_card = card_manager.draw_bottom_infection_card()
+        self.assertEqual(len(card_manager.infection_card_deck),
+                         len(CITY_LIST) - 1)
+        self.assertTrue(bottom_card not in card_manager.infection_card_deck)
+        self.assertEqual(card_manager.infection_card_discard, [bottom_card])
+
 
 class TestPlayerMethods(unittest.TestCase):
     def test_init(self):
         p = TestPlayer.get_test_player()
         self.assertEqual(p.current_city, TestMap().get_city("Atlanta"))
         self.assertEqual(p.player_id, "someidhere")
-        self.assertEqual(p.city_cards, [])
+        self.assertEqual(p.city_cards, [CityCard("San Francisco", CITY_LIST["San Francisco"]),
+                                        CityCard("Algiers", CITY_LIST["Algiers"]), CityCard("Karachi", CITY_LIST["Karachi"])])
 
     def test_move_adjacent(self):
         p = TestPlayer.get_test_player()
@@ -309,14 +417,15 @@ class TestPlayerMethods(unittest.TestCase):
         self.assertEqual(p.current_city, TestMap().get_city("Chicago"))
 
     def test_move_charter_flight(self):
-        p = TestPlayer.get_test_player()
+        p = TestPlayer.get_second_test_player()
+        t = TestMap()
         self.assertTrue(p.move_charter_flight(
-            TestMap().get_city("Atlanta"), TestMap().get_city("Tokyo")))
+            t.get_city_card("Atlanta"), t.get_city("Tokyo")))
         self.assertFalse(p.move_charter_flight(
-            TestMap().get_city("Atlanta"), TestMap().get_city("Chicago")))
+            t.get_city_card("Atlanta"), t.get_city("Chicago")))
         self.assertFalse(p.move_charter_flight(
-            TestMap().get_city("Tokyo"), TestMap().get_city("Tokyo")))
-        self.assertEqual(p.current_city, TestMap().get_city("Tokyo"))
+            t.get_city_card("Tokyo"), t.get_city("Tokyo")))
+        self.assertEqual(p.current_city, t.get_city("Tokyo"))
 
     def test_move_shuttle_flight(self):
         p = TestPlayer.get_test_player()
@@ -326,6 +435,113 @@ class TestPlayerMethods(unittest.TestCase):
         self.assertTrue(p.move_shuttle_flight(t.get_city("Osaka")))
         self.assertFalse(p.move_shuttle_flight(t.get_city("Osaka")))
         self.assertFalse(p.move_shuttle_flight(t.get_city("Tokyo")))
+        self.assertTrue(p.move_shuttle_flight(t.get_city("Atlanta")))
+
+    def test_give_knowledge(self):
+        p1 = TestPlayer.get_test_player()
+        p2 = TestPlayer.get_second_test_player()
+        self.assertTrue(p1.give_knowledge(
+            CityCard("Algiers", CITY_LIST["Algiers"]), p2))
+        self.assertTrue(
+            CityCard("Algiers", CITY_LIST["Algiers"]) in p2.city_cards)
+        self.assertTrue(
+            CityCard("Algiers", CITY_LIST["Algiers"]) not in p1.city_cards)
+        self.assertFalse(p1.give_knowledge(
+            CityCard("Algiers", CITY_LIST["Algiers"]), p2))
+        self.assertTrue(p1.give_knowledge(
+            CityCard("Karachi", CITY_LIST["Karachi"]), p2))
+        self.assertFalse(p1.give_knowledge(
+            CityCard("San Francisco", CITY_LIST["San Francisco"]), p2))
+        self.assertTrue(p2.give_knowledge(
+            CityCard("Algiers", CITY_LIST["Algiers"]), p1))
+        self.assertTrue(p2.give_knowledge(
+            CityCard("Chennai", CITY_LIST["Chennai"]), p1))
+
+    # def test_take_knowledge(self):
+    #     p2 = TestPlayer.get_test_player()
+    #     p1 = TestPlayer.get_second_test_player()
+    #     self.assertTrue(p1.take_knowledge(
+    #         CityCard("Algiers", CITY_LIST["Algiers"]), p2))
+    #     self.assertTrue(
+    #         CityCard("Algiers", CITY_LIST["Algiers"]) in p1.city_cards)
+    #     self.assertTrue(
+    #         CityCard("Algiers", CITY_LIST["Algiers"]) not in p2.city_cards)
+    #     self.assertFalse(p1.take_knowledge(
+    #         CityCard("Algiers", CITY_LIST["Algiers"]), p2))
+    #     self.assertTrue(p1.take_knowledge(
+    #         CityCard("Karachi", CITY_LIST["Karachi"]), p2))
+    #     self.assertFalse(p1.take_knowledge(
+    #         CityCard("San Francisco", CITY_LIST["San Francisco"]), p2))
+    #     self.assertTrue(p2.take_knowledge(
+    #         CityCard("Algiers", CITY_LIST["Algiers"]), p1))
+    #     self.assertTrue(p2.take_knowledge(
+    #         CityCard("Chennai", CITY_LIST["Chennai"]), p1))
+
+    def test_add_card(self):
+        p = TestPlayer.get_test_player()
+        self.assertTrue(p.add_card(
+            CityCard("Beijing", CITY_LIST["Beijing"])))
+        self.assertTrue(p.add_card(
+            CityCard("Shanghai", CITY_LIST["Shanghai"])))
+        self.assertFalse(p.add_card(
+            CityCard("Shanghai", CITY_LIST["Shanghai"])))
+        self.assertTrue(p.add_card(
+            CityCard("Tehran", CITY_LIST["Tehran"])))
+        self.assertTrue(p.add_card(
+            CityCard("Miami", CITY_LIST["Miami"])))
+        self.assertFalse(p.add_card(
+            CityCard("Chicago", CITY_LIST["Chicago"])))
+
+    def test_subtract_card(self):
+        p = TestPlayer.get_test_player()
+        self.assertTrue(p.subtract_card(
+            CityCard("San Francisco", CITY_LIST["San Francisco"])))
+        self.assertFalse(p.subtract_card(
+            CityCard("San Francisco", CITY_LIST["San Francisco"])))
+        self.assertTrue(p.subtract_card(
+            CityCard("Algiers", CITY_LIST["Algiers"])))
+        self.assertTrue(p.subtract_card(
+            CityCard("Karachi", CITY_LIST["Karachi"])))
+
+    def test_can_discover_cure(self):
+        p1 = TestPlayer.get_can_cure_red_player()
+        p2 = TestPlayer.get_second_test_player()
+        self.assertTrue(p1.can_discover_cure(RED))
+        self.assertTrue(p1.can_discover_cure(RED, p1.city_cards))
+        self.assertFalse(p1.can_discover_cure(BLUE))
+        self.assertFalse(p2.can_discover_cure(BLUE))
+        p2.subtract_card(CityCard("Atlanta", CITY_LIST["Atlanta"]))
+        p2.add_card(CityCard("Beijing", CITY_LIST["Beijing"]))
+        p2.add_card(CityCard("Seoul", CITY_LIST["Seoul"]))
+        self.assertTrue(p2.can_discover_cure(RED))
+        self.assertFalse(p2.can_discover_cure(BLUE))
+
+    def test_discover_cure(self):
+        p1 = TestPlayer.get_can_cure_red_player()
+        p2 = TestPlayer.get_second_test_player()
+        self.assertRaises(InvalidOperationError, p1.discover_cure, RED, [])
+        p1.discover_cure(RED, p1.city_cards)
+        self.assertRaises(InvalidOperationError,
+                          p1.discover_cure, RED, p1.city_cards)
+        self.assertRaises(InvalidOperationError,
+                          p2.discover_cure, RED, p2.city_cards)
+
+    def test_has_actions_left(self):
+        p1 = TestPlayer.get_test_player()
+        p2 = TestPlayer.get_second_test_player()
+        p1.make_active()
+        self.assertTrue(p1.has_actions_left())
+        for _ in range(MAX_ACTIONS):
+            p1.dec_actions_left()
+        self.assertFalse(p1.has_actions_left())
+        self.assertFalse(p2.has_actions_left())
+
+    def test_dec_actions(self):
+        p1 = TestPlayer.get_test_player()
+        p1.make_active()
+        while p1.has_actions_left():
+            p1.dec_actions_left()
+        self.assertFalse(p1.has_actions_left())
 
 
 if __name__ == '__main__':

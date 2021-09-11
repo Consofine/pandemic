@@ -1,5 +1,6 @@
 import random
 import string
+from constants import CITY_LIST
 
 
 def generate_id(size=6, chars=string.ascii_uppercase + string.digits):
