@@ -7,8 +7,12 @@ from constants import *
 
 class TestBoard:
     @classmethod
+    def get_new_board(self):
+        return Board(["playeronesid", "playertwosid", "playerthreesid"])
+
+    @classmethod
     def get_test_board(self):
-        b = Board("somegameidhere", ["playeronesid", "playertwosid"])
+        b = Board(["playeronesid", "playertwosid"])
         p = b.active_player
         p.add_card(CityCard("Atlanta"))
         p.add_card(CityCard("Chicago"))
@@ -24,6 +28,20 @@ class TestPlayer:
     @classmethod
     def get_test_player_two(self, cities: dict = TestBoard.get_test_board().cities):
         return Player("playertwosid", Role(), cities[STARTING_CITY])
+
+
+class TestAction:
+    @classmethod
+    def get_move_adjacent(self, to_city: str):
+        return {"action": {"name": "MOVE_ADJACENT", "args": {"to_city": to_city}}}
+
+    @classmethod
+    def get_move_direct_flight(self, city_card: str):
+        return {"action": {"name": "MOVE_DIRECT_FLIGHT", "args": {"city_card": city_card}}}
+
+    @classmethod
+    def get_move_charter_flight(self, city_card: str, to_city: str):
+        return {"action": {"name": "MOVE_CHARTER_FLIGHT", "args": {"city_card": city_card, "to_city": to_city}}}
 
 
 class TestBoardMethods(unittest.TestCase):
@@ -50,21 +68,21 @@ class TestBoardMethods(unittest.TestCase):
         directly except by take_action anyway.
         """
         b = TestBoard.get_test_board()
-        self.assertTrue(b.move_adjacent(b.cities["Chicago"]))
-        self.assertEqual(b.active_player.current_city, b.cities["Chicago"])
-        self.assertFalse(b.move_adjacent(b.cities["Chicago"]))
+        self.assertTrue(b.move_adjacent(b.get_city("Chicago")))
+        self.assertEqual(b.active_player.current_city, b.get_city("Chicago"))
+        self.assertFalse(b.move_adjacent(b.get_city("Chicago")))
         self.assertTrue(b.active_player.current_city,
-                        b.cities["San Francisco"])
+                        b.get_city("San Francisco"))
 
     def test_move_direct_flight(self):
         b = TestBoard.get_test_board()
         self.assertTrue(b.move_direct_flight(
-            CityCard("Paris", CITY_LIST["Paris"])))
-        self.assertEqual(b.active_player.current_city, b.cities["Paris"])
+            CityCard("Paris")))
+        self.assertEqual(b.active_player.current_city, b.get_city("Paris"))
         self.assertEqual(
-            b.players["playertwosid"].current_city, b.cities[STARTING_CITY])
+            b.get_player("playertwosid").current_city, b.get_city(STARTING_CITY))
         self.assertFalse(b.move_direct_flight(
-            CityCard("Paris", CITY_LIST["Paris"])))
+            CityCard("Paris")))
 
     def test_move_charter_flight(self):
         b = TestBoard.get_test_board()
@@ -136,6 +154,117 @@ class TestBoardMethods(unittest.TestCase):
         self.assertFalse(b.discover_cure(p.city_cards, BLUE))
         self.assertFalse(b.discover_cure(p.city_cards, RED))
         self.assertEqual(len(p.city_cards), 1)
+
+    def test_move_to_next_player(self):
+        b = TestBoard.get_test_board()
+        self.assertEqual(b.active_player, b.get_player('playeronesid'))
+        b.move_to_next_player()
+        self.assertEqual(b.active_player, b.get_player('playertwosid'))
+        b.move_to_next_player()
+        self.assertEqual(b.active_player, b.get_player('playeronesid'))
+        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS)
+
+    def test_draw_city_cards(self):
+        b = TestBoard.get_test_board()
+        cards = b.draw_city_cards()
+        while len(cards) == 2:
+            cards = b.draw_city_cards()
+        self.assertEqual(b.card_manager.infection_card_discard, [])
+        self.assertEqual(
+            len(b.card_manager.infection_card_deck), len(CITY_LIST.keys()))
+        self.assertEqual(City.outbreaks_occurred, 0)
+        if len(cards) == 1:
+            self.assertEqual(b.infection_manager.rate, 2)
+        elif not cards:
+            self.assertEqual(b.infection_manager.rate, 3)
+
+    def test_draw_infection_cards_and_place_cubes(self):
+        b = TestBoard.get_test_board()
+        b.draw_infection_cards_and_place_cubes()
+        self.assertEqual(City.outbreaks_occurred, 0)
+        self.assertEqual((DISEASE_CUBE_LIMIT * 4) -
+                         sum(b.disease_manager.diseases_remaining.values()), 2)
+        self.assertEqual(b.infection_manager.rate, 2)
+        b.infection_manager.increase_level()
+        b.infection_manager.increase_level()
+        b.infection_manager.increase_level()
+        self.assertEqual(b.infection_manager.rate, 3)
+        b.draw_infection_cards_and_place_cubes()
+        self.assertEqual((DISEASE_CUBE_LIMIT * 4) -
+                         sum(b.disease_manager.diseases_remaining.values()), 5)
+
+    def test_take_action_move_adjacent(self):
+        b = TestBoard.get_new_board()
+        self.assertTrue(b.take_action(TestAction.get_move_adjacent("Chicago")))
+        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 1)
+        self.assertEqual(b.active_player.current_city, b.get_city("Chicago"))
+        self.assertFalse(b.take_action(
+            TestAction.get_move_adjacent("Manila")))
+        self.assertFalse(b.take_action(
+            TestAction.get_move_adjacent("Hot Potato")))
+        self.assertEqual(b.active_player.current_city, b.get_city("Chicago"))
+        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 1)
+        self.assertTrue(b.take_action(
+            TestAction.get_move_adjacent("Montreal")))
+        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 2)
+        self.assertEqual(b.active_player.current_city, b.get_city("Montreal"))
+        self.assertTrue(b.take_action(
+            TestAction.get_move_adjacent("New York")))
+        self.assertTrue(b.take_action(TestAction.get_move_adjacent("London")))
+        self.assertFalse(b.take_action(TestAction.get_move_adjacent("Essen")))
+
+    def test_take_action_move_direct_flight(self):
+        b = TestBoard.get_test_board()
+        self.assertTrue(b.take_action(
+            TestAction.get_move_direct_flight("Tokyo")))
+        self.assertEqual(b.active_player.current_city, b.get_city("Tokyo"))
+        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 1)
+        self.assertFalse(b.take_action(
+            TestAction.get_move_direct_flight("Tokyo")))
+        self.assertEqual(b.active_player.current_city, b.get_city("Tokyo"))
+        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 1)
+        self.assertTrue(b.take_action(
+            TestAction.get_move_direct_flight("Chicago")))
+        self.assertEqual(b.active_player.current_city, b.get_city("Chicago"))
+        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 2)
+        self.assertTrue(b.take_action(
+            TestAction.get_move_direct_flight("Atlanta")))
+        self.assertEqual(b.active_player.current_city, b.get_city("Atlanta"))
+        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 3)
+
+    def test_take_action_move_charter_flight(self):
+        b = TestBoard.get_test_board()
+        self.assertTrue(b.take_action(
+            TestAction.get_move_charter_flight("Atlanta", "Montreal")
+        ))
+        self.assertEqual(b.active_player.current_city, b.get_city("Montreal"))
+        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 1)
+        self.assertTrue(b.take_action(
+            TestAction.get_move_adjacent("Chicago")
+        ))
+        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 2)
+        self.assertFalse(b.take_action(
+            TestAction.get_move_charter_flight("Chicago", "Chicago")
+        ))
+        self.assertEqual(b.active_player.current_city, b.get_city("Chicago"))
+        self.assertTrue(b.take_action(
+            TestAction.get_move_charter_flight("Chicago", "Tehran")
+        ))
+        self.assertEqual(b.active_player.current_city, b.get_city("Tehran"))
+        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 3)
+        self.assertFalse(b.take_action(
+            TestAction.get_move_charter_flight("Chicago", "Tehran")
+        ))
+        self.assertEqual(b.active_player.current_city, b.get_city("Tehran"))
+        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 3)
+        self.assertFalse(b.take_action(
+            TestAction.get_move_charter_flight("Tehran", "Tokyo")
+        ))
+        self.assertTrue(b.take_action(
+            TestAction.get_move_adjacent("Baghdad")
+        ))
+        self.assertEqual(b.active_player.current_city, b.get_city("Baghdad"))
+        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 4)
 
 
 if __name__ == '__main__':
