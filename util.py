@@ -8,7 +8,9 @@ def generate_id(size=6, chars=string.ascii_uppercase + string.digits):
 
 
 def validate_keys(keys, types):
-    for x in range(keys):
-        if not isinstance(keys[x], types[x]):
-            return False
+    try:
+        for x in range(len(keys)):
+            keys[x] = types[x](keys[x])
+    except ValueError:
+        return False
     return True

@@ -2,63 +2,10 @@ from typing import Counter, List, Union
 import random
 import logging
 import functools
-import jsonpickle
 from enum import Enum
 from custom_exceptions import GameEndedError, InvalidGametypeError, InvalidOperationError
 from constants import *
 from util import validate_keys
-
-
-class Serializer:
-    @classmethod
-    def get_board_object(id):
-        """
-        Class method for deserializing the game object from a json file
-        Returns:
-            board_object - Board object holding all information needed to play game
-        """
-        with open("game-{}.json".format(id), "r") as f:
-            board_object = jsonpickle.decode(f.read())
-        return board_object
-
-    @classmethod
-    def save_board_object(game_object, id):
-        """
-        Class method for serializing board object to a json file
-        Args:
-            board_object - Board object holding all information needed to play game
-        """
-        with open("game-{}.json".format(id), "w+") as f:
-            f.write(jsonpickle.encode(game_object))
-
-
-class Validator:
-    """
-    Object containing methods for validating different types of objects
-    """
-    @classmethod
-    def validate_color(color):
-        """
-        Ensure that provided object is actually a Color
-        """
-        if color not in COLORS:
-            raise InvalidGametypeError(Color, color)
-
-    @classmethod
-    def validate_city(city):
-        """
-        Ensure that provided object is actually a City
-        """
-        if not isinstance(city, City):
-            raise InvalidGametypeError(City, city)
-
-    @classmethod
-    def validate_city_card(city_card):
-        """
-        Ensure that provided object is actually a CityCard
-        """
-        if not isinstance(city_card, CityCard):
-            raise InvalidGametypeError(CityCard, city_card)
 
 
 class Role:
@@ -74,16 +21,15 @@ class City:
     """
     Representing a board location and its state
     """
+    outbreaks_occurred = 0
 
-    def __init__(self, name: str, color=None):
+    def __init__(self, name: Union[str, 'City']):
+        if isinstance(name, City):
+            return
         if name not in CITY_LIST:
-            raise InvalidOperationError(
-                "Invalid city name supplied to city constructor.")
+            raise ValueError("Invalid city name supplied to city constructor.")
         self.name: str = name
-        if color:
-            self.color = color
-        else:
-            self.color = CITY_LIST[name]
+        self.color = CITY_LIST[name]
         self.disease_count: dict = dict.fromkeys(
             [RED, BLUE, YELLOW, GREY], 0)
         self.has_research_station: bool = False
@@ -154,6 +100,7 @@ class City:
             color - color of disease that is outbreaking
             prior_outbreaks - array to track cities that have been hit by this outbreak chain
         """
+        City.outbreaks_occurred += 1
         for city in self.connected_cities:
             if city not in prior_outbreaks:
                 city.add_single_disease(color, prior_outbreaks)
@@ -201,12 +148,14 @@ class Card:
     Parent class holding city name and color
     """
 
-    def __init__(self, city_name: str, color):
-        if not city_name in CITY_LIST or color not in COLORS:
+    def __init__(self, city_name: Union[str, 'Card']):
+        if isinstance(city_name, Card):
+            return
+        if not city_name in CITY_LIST:
             raise ValueError(
-                "Invalid argument duo passed to Card constructor: {} {}".format(city_name, color))
-        self.name: str = city_name
-        self.color = color
+                "Invalid name passed to Card constructor: {}".format(city_name))
+        self.name = city_name
+        self.color = CITY_LIST[city_name]
 
     def __eq__(self, other: object) -> bool:
         """
@@ -228,14 +177,8 @@ class CityCard(Card):
     Representing the type of card used to cure diseases and travel.
     """
 
-    def __init__(self, city_name: str, color=None):
-        if not city_name in CITY_LIST:
-            raise InvalidOperationError(
-                "Invalid name passed to CityCard constructor.")
-        if not color:
-            super().__init__(city_name, CITY_LIST[city_name])
-        else:
-            super().__init__(city_name, color)
+    def __init__(self, city_name: Union[str, Card]):
+        super().__init__(city_name)
 
 
 class InfectionCard(Card):
@@ -244,8 +187,8 @@ class InfectionCard(Card):
     place new infections in certain cities.
     """
 
-    def __init__(self, city_name: str, color):
-        super().__init__(city_name, color)
+    def __init__(self, city_name: Union[str, Card]):
+        super().__init__(city_name)
 
 
 class EpidemicCard:
@@ -315,8 +258,6 @@ class Player:
             bool - true if move is successful, false otherwise
         """
         if cur_city_card not in self.city_cards:
-            logging.error(
-                "Somehow played a card not in this player's hand", cur_city_card, self)
             return False
         if dest_city != self.current_city and cur_city_card == self.current_city:
             self.current_city = dest_city
@@ -396,9 +337,7 @@ class Player:
             self.city_cards.remove(city_card)
             return True
         except ValueError:
-            logging.error(
-                "Tried to subtract a card that wasn't in this player's hand.", city_card, self)
-        return False
+            return False
 
     def can_discover_cure(self, color: str, city_cards: List[CityCard] = []) -> bool:
         """
@@ -442,6 +381,24 @@ class Player:
         for city_card in city_cards:
             self.subtract_card(city_card)
 
+    def build_research_station(self, city_card: CityCard) -> bool:
+        """
+        Helper method for checking if this player can build a research station in their
+        current city, using the given city card. Player's location must match card, and
+        there must not already be a research station in this city.
+        Removes the given card from the user's hand if they can build the research station.
+        Returns:
+            bool - True if the user can build a research station, otherwise False
+        """
+        if city_card not in self.city_cards or city_card != self.current_city or self.current_city.has_research_station:
+            return False
+        if self.subtract_card(city_card):
+            if self.current_city.add_research_station():
+                return True
+            # add card back in, since we can't actually build (shouldn't happen)
+            self.add_card(city_card)
+        return False
+
     def has_actions_left(self) -> bool:
         """
         Checks if this player has more actions left in their turn.
@@ -484,7 +441,7 @@ class CardManager:
         Returns:
             [CityCard | EpidemicCard] - deck of CityCards and EpidemicCards for game
         """
-        city_cards: List = [CityCard(c, CITY_LIST[c])
+        city_cards: List = [CityCard(c)
                             for c in CITY_LIST.keys()]
         city_cards.extend([EpidemicCard()] * num_epidemic_cards)
         random.shuffle(city_cards)
@@ -496,7 +453,7 @@ class CardManager:
         Returns:
             [InfectionCard] - deck of InfectionCards for game
         """
-        infection_cards = [InfectionCard(c, CITY_LIST[c])
+        infection_cards = [InfectionCard(c)
                            for c in CITY_LIST.keys()]
         random.shuffle(infection_cards)
         return infection_cards
@@ -743,16 +700,15 @@ class Board:
     etc
     """
 
-    def __init__(self, game_id: str, player_ids: List[str], starting_city: City = City(STARTING_CITY, CITY_LIST[STARTING_CITY])) -> None:
+    def __init__(self, player_ids: List[str], starting_city: str = STARTING_CITY) -> None:
         # set up game state
-        self.game_id: str = game_id
         self.infection_manager: InfectionManager = InfectionManager()
         self.disease_manager: DiseaseManager = DiseaseManager()
         self.card_manager: CardManager = CardManager()
-        self.cities: dict = self.init_cities()
+        self.cities: dict = self.init_cities(starting_city)
         self.player_ids = player_ids
         # create player list and set active player
-        self.players: dict = {p: Player(p, Role(), self.get_city(starting_city.name))
+        self.players: dict = {p: Player(p, Role(), self.get_city(starting_city))
                               for p in player_ids}
         self.set_active_player(self.players[player_ids[0]])
 
@@ -767,11 +723,11 @@ class Board:
             ActionList.discover_cure: self.discover_cure,
         }
         self.arg_mappings = {
-            ActionList.move_adjacent: {"player": Player, "to_city": City},
+            ActionList.move_adjacent: {"to_city": City},
             ActionList.move_direct_flight: {"city_card": CityCard},
             ActionList.move_charter_flight: {"city_card": CityCard, "to_city": City},
             ActionList.move_shuttle_flight: {"to_city": City},
-            ActionList.build_research_station: {},
+            ActionList.build_research_station: {"city_card": CityCard},
             ActionList.treat_disease: {"color": str},
             ActionList.share_knowledge: {"city_card": CityCard, "player_to": Union[Player, str], "player_from": Union[Player, str]},
             ActionList.discover_cure: {"city_cards": List[CityCard], "color": str},
@@ -790,20 +746,21 @@ class Board:
                 p.make_active()
             else:
                 p.is_active = False
+                p.actions_left = 0
 
     @classmethod
-    def init_cities(self) -> dict:
+    def init_cities(self, starting_city: str) -> dict:
         """
         Using cities and connected cities information from constants file,
         creates a dict holding all cities with all of their related data
         Returns: 
             cities - dict associating city names to city objects for all 48 cities
         """
-        cities = {c: City(c, CITY_LIST[c]) for c in CITY_LIST.keys()}
+        cities = {c: City(c) for c in CITY_LIST.keys()}
         for city in cities.values():
             city.set_connected_cities([cities[c]
                                       for c in CITY_CONNECTIONS[city.name]])
-        cities[STARTING_CITY].add_research_station()
+        cities[starting_city].add_research_station()
         return cities
 
     def take_action(self, msg):
@@ -814,22 +771,22 @@ class Board:
         if not self.active_player.has_actions_left():
             return False
         try:
-            act = msg["action"]
-            if act not in [action.value for action in ActionList]:
-                raise InvalidOperationError("Invalid action supplied.")
+            act = ActionList(msg["action"]["name"])
             method = self.action_mappings[act]
             arg_keys = self.arg_mappings[act]
-            args = [msg["action_args"][key] for key in arg_keys.keys()]
-            success = validate_keys(
-                args, arg_keys.values()) and method(*args)
+            args = [msg["action"]["args"][key] for key in arg_keys.keys()]
+            success = self.validate_keys(
+                args, list(arg_keys.values())) and method(*args)
             if not success:
                 raise InvalidOperationError("Action failed.")
             self.active_player.dec_actions_left()
             return True
         except InvalidOperationError as e:
-            logging.error(e.message, msg, self)
+            #logging.error(e.message, msg, self)
+            pass
         except KeyError:
-            logging.error("Cannot find key in msg or action call.", msg)
+            #logging.error("Cannot find key in msg or action call.", msg)
+            pass
         return False
 
     def move_adjacent(self, to_city: City):
@@ -846,7 +803,7 @@ class Board:
     def move_shuttle_flight(self, to_city: City):
         return self.active_player.move_shuttle_flight(to_city)
 
-    def build_research_station(self, to_city: str = None):
+    def build_research_station(self, city_card: str):
         """
         Build a research station in the active player's current city, or 
         in the city corresponding to the supplied city name if given. Building
@@ -854,9 +811,7 @@ class Board:
         special power-up.
         TODO: handle special case for non-active city
         """
-        if to_city:
-            return self.get_city(to_city).add_research_station()
-        return self.active_player.current_city.add_research_station()
+        return self.active_player.build_research_station(city_card)
 
     def treat_disease(self, color: str):
         """
@@ -919,11 +874,13 @@ class Board:
                 continue
             self.infection_manager.increase_level()
             bottom_card = self.card_manager.handle_epidemic()
-            wasOutbreak = self.cities[bottom_card.name].add_epidemic_disease()
+            self.cities[bottom_card.name].add_epidemic_disease(
+                bottom_card.color)
             self.disease_manager.update_disease_counts(
                 list(self.cities.values()))
-            if wasOutbreak:
-                self.infection_manager.increase_outbreak_count()
+        for _ in range(City.outbreaks_occurred):
+            self.infection_manager.increase_outbreak_count()
+        City.outbreaks_occurred = 0
         return city_cards
 
     def draw_infection_cards_and_place_cubes(self):
@@ -936,20 +893,47 @@ class Board:
             self.infection_manager.rate)
         for ic in infection_cards:
             self.cities[ic.name].add_single_disease(ic.color)
+        for _ in range(City.outbreaks_occurred):
+            self.infection_manager.increase_outbreak_count()
+        self.disease_manager.update_disease_counts(
+            list(self.cities.values()))
+        City.outbreaks_occurred = 0
 
     def end_of_actions(self):
-        # draw city cards and give them to the active player
+        """
+        Draw city cards and give them to the active player. Draw
+        infection cards and place disease cubes on respective cities.
+        Handle epidemics if one occurs while drawing city cards.
+        TODO: handle case where user has too many cards
+        """
         self.active_player.city_cards += self.card_manager.draw_city_cards()
-        self.draw_infection_cards_and_place_cubes()  # TODO: implement this
-        if len(self.active_player.city_cards) <= MAX_HAND_COUNT:
-            self.move_to_next_player()
+        self.draw_infection_cards_and_place_cubes()
+        # if len(self.active_player.city_cards) <= MAX_HAND_COUNT:
+        self.move_to_next_player()
 
-    def get_city(self, city_name: str) -> City:
+    def get_city(self, city_name: Union[str, City]) -> City:
+        if isinstance(city_name, City):
+            return city_name
         if not city_name in self.cities:
             raise InvalidOperationError("Invalid city name.")
         return self.cities[city_name]
 
-    def get_player(self, player_id: str) -> Player:
+    def get_player(self, player_id: Union[str, Player]) -> Player:
+        if isinstance(player_id, Player):
+            return player_id
         if not player_id in self.players.keys():
             raise InvalidOperationError("Invalid player id.")
         return self.players[player_id]
+
+    def validate_keys(self, keys, types):
+        try:
+            for x in range(len(keys)):
+                if types[x] == Player:
+                    keys[x] = self.get_player(keys[x])
+                elif types[x] == City:
+                    keys[x] = self.get_city(keys[x])
+                else:
+                    keys[x] = types[x](keys[x])
+        except ValueError:
+            return False
+        return True

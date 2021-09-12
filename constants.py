@@ -120,5 +120,4 @@ CITY_CONNECTIONS = {
     "Algiers": ["Madrid", "Paris", "Istanbul", "Cairo"],
     "Seoul": ["Beijing", "Shanghai", "Tokyo"],
     "Madrid": ["London", "Sao Paulo", "Paris", "New York", "Algiers"]
-
 }
