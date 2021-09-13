@@ -182,9 +182,9 @@ class TestActionsAndAbilities(unittest.TestCase):
                                            "Baghdad")
                                        ))
         self.assertEqual(c.get_board_object(
-            GAME_ID).active_player.current_city, c.get_board_object(GAME_ID).get_city("Baghdad"))
+            GAME_ID).get_player(PLAYER_ONE_ID).current_city, c.get_board_object(GAME_ID).get_city("Baghdad"))
         self.assertEqual(c.get_board_object(
-            GAME_ID).active_player.actions_left, MAX_ACTIONS - 4)
+            GAME_ID).get_player(PLAYER_ONE_ID).actions_left, MAX_ACTIONS - 4)
 
     def test_take_action_move_shuttle_flight(self):
         c: TestController = ExampleController.get_test_controller()
@@ -206,7 +206,7 @@ class TestActionsAndAbilities(unittest.TestCase):
         self.assertEqual(c.get_board_object(
             GAME_ID).active_player.current_city, c.get_board_object(GAME_ID).get_city("Atlanta"))
         self.assertEqual(c.get_board_object(
-            GAME_ID).active_player.actions_left, MAX_ACTIONS - 4)
+            GAME_ID).get_player(PLAYER_ONE_ID).actions_left, MAX_ACTIONS - 4)
 
     def test_take_action_build_research_station(self):
         c: TestController = ExampleController.get_test_controller()
@@ -230,9 +230,9 @@ class TestActionsAndAbilities(unittest.TestCase):
         self.assertOkay(c.handle_input(GAME_ID,
                                        TestAction.get_build_research_station("San Francisco")))
         self.assertEqual(c.get_board_object(
-            GAME_ID).active_player.actions_left, MAX_ACTIONS - 4)
+            GAME_ID).get_player(PLAYER_ONE_ID).actions_left, MAX_ACTIONS - 4)
         self.assertEqual(len(c.get_board_object(
-            GAME_ID).active_player.city_cards), 2)
+            GAME_ID).get_player(PLAYER_ONE_ID).city_cards), 2)
 
     # def test_take_action_treat_disease(self):
     #     """

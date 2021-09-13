@@ -1,5 +1,4 @@
 import json
-import time
 import pickle
 from typing import List
 from board import Board, CityCard, City, Player
@@ -99,13 +98,8 @@ class Controller:
         Returns:
             str - JSON-dumped representation of the current board
         """
-        print("msg: {}".format(msg))
         msg = json.loads(msg)
-        start = time.time()
         b = Serializer.load_board(game_id)
-        end = time.time()
-        print("Load took {}.".format(end - start))
-        start = time.time()
         error = None
         if ACTION in msg or ABILITY in msg:
             try:
@@ -123,12 +117,7 @@ class Controller:
                     b.check_end_of_actions()
             except Exception as e:
                 error = True
-        end = time.time()
-        print("Action took {}.".format(end - start))
-        start = time.time()
         Serializer.save_board(b, game_id)
-        end = time.time()
-        print("Save took {}.".format(end - start))
         return Serializer.print_board(b, error)
 
     def validate_keys(self, board: Board, keys: List, types: List):
