@@ -87,15 +87,15 @@ class TestCityMethods(unittest.TestCase):
     def test_add_disease(self):
         test_map = TestMap()
         self.assertFalse(test_map.get_city(
-            "Los Angeles").add_single_disease(BLUE))
+            "Los Angeles").add_single_disease(test_map.cities, BLUE))
         self.assertFalse(test_map.get_city(
-            "San Francisco").add_single_disease(YELLOW))
+            "San Francisco").add_single_disease(test_map.cities, YELLOW))
         self.assertFalse(test_map.get_city(
-            "San Francisco").add_single_disease(YELLOW))
+            "San Francisco").add_single_disease(test_map.cities, YELLOW))
         self.assertFalse(test_map.get_city(
-            "San Francisco").add_single_disease(YELLOW))
+            "San Francisco").add_single_disease(test_map.cities, YELLOW))
         self.assertTrue(test_map.get_city(
-            "San Francisco").add_single_disease(YELLOW))
+            "San Francisco").add_single_disease(test_map.cities, YELLOW))
         self.assertEqual(test_map.get_city(
             "San Francisco").disease_count[YELLOW], 3)
         self.assertEqual(test_map.get_city("Chicago").disease_count[YELLOW], 1)
@@ -108,9 +108,10 @@ class TestCityMethods(unittest.TestCase):
 
     def test_trigger_outbreak(self):
         test_map = TestMap()
-        test_map.get_city("San Francisco").trigger_outbreak(YELLOW, [])
-        test_map.get_city("Los Angeles").trigger_outbreak(
-            YELLOW, [test_map.get_city("Mexico City")])
+        test_map.get_city("San Francisco").trigger_outbreak(
+            test_map.cities, YELLOW, [])
+        test_map.get_city("Los Angeles").trigger_outbreak(test_map.cities,
+                                                          YELLOW, [test_map.get_city("Mexico City")])
         self.assertEqual(test_map.get_city("Chicago").disease_count[YELLOW], 2)
         self.assertEqual(test_map.get_city(
             "Los Angeles").disease_count[YELLOW], 1)
@@ -119,7 +120,8 @@ class TestCityMethods(unittest.TestCase):
         self.assertEqual(test_map.get_city(
             "Mexico City").disease_count[YELLOW], 0)
 
-        test_map.get_city("Chicago").trigger_outbreak(BLUE, [])
+        test_map.get_city("Chicago").trigger_outbreak(
+            test_map.cities, BLUE, [])
         self.assertEqual(test_map.get_city(
             "Mexico City").disease_count[BLUE], 1)
         self.assertEqual(test_map.get_city(
@@ -130,17 +132,17 @@ class TestCityMethods(unittest.TestCase):
     def test_add_epidemic_disease(self):
         test_map = TestMap()
         self.assertFalse(test_map.get_city(
-            "Chicago").add_epidemic_disease(BLUE))
+            "Chicago").add_epidemic_disease(test_map.cities, BLUE))
         self.assertEqual(test_map.get_city("Chicago").disease_count[BLUE], 3)
         self.assertFalse(test_map.get_city(
-            "Chicago").add_epidemic_disease(YELLOW))
+            "Chicago").add_epidemic_disease(test_map.cities, YELLOW))
         self.assertEqual(test_map.get_city("Chicago").disease_count[YELLOW], 3)
         self.assertEqual(test_map.get_city("Chicago").disease_count[RED], 0)
         self.assertEqual(test_map.get_city("Chicago").disease_count[GREY], 0)
         self.assertEqual(test_map.get_city(
             "San Francisco").disease_count[YELLOW], 0)
         self.assertTrue(test_map.get_city(
-            "Chicago").add_epidemic_disease(YELLOW))
+            "Chicago").add_epidemic_disease(test_map.cities, YELLOW))
         self.assertEqual(test_map.get_city(
             "San Francisco").disease_count[YELLOW], 1)
         self.assertEqual(test_map.get_city(
@@ -153,7 +155,7 @@ class TestCityMethods(unittest.TestCase):
         self.assertFalse(test_map.get_city(
             "Chicago").treat_single_disease(BLUE))
         self.assertFalse(test_map.get_city(
-            "Chicago").add_epidemic_disease(BLUE))
+            "Chicago").add_epidemic_disease(test_map.cities, BLUE))
         self.assertTrue(test_map.get_city(
             "Chicago").treat_single_disease(BLUE))
         self.assertEqual(test_map.get_city("Chicago").disease_count[BLUE], 2)
@@ -162,7 +164,8 @@ class TestCityMethods(unittest.TestCase):
 
     def test_treat_all_disease(self):
         test_map = TestMap()
-        test_map.get_city("San Francisco").add_epidemic_disease(BLUE)
+        test_map.get_city("San Francisco").add_epidemic_disease(
+            test_map.cities, BLUE)
         self.assertTrue(test_map.get_city(
             "San Francisco").treat_all_disease(BLUE))
         self.assertFalse(test_map.get_city(
@@ -442,42 +445,26 @@ class TestPlayerMethods(unittest.TestCase):
     def test_give_knowledge(self):
         p1 = TestPlayer.get_test_player()
         p2 = TestPlayer.get_second_test_player()
-        self.assertTrue(p1.give_knowledge(
-            CityCard("Algiers"), p2))
-        self.assertTrue(
-            CityCard("Algiers") in p2.city_cards)
-        self.assertTrue(
-            CityCard("Algiers") not in p1.city_cards)
         self.assertFalse(p1.give_knowledge(
             CityCard("Algiers"), p2))
-        self.assertTrue(p1.give_knowledge(
+        self.assertFalse(
+            CityCard("Algiers") in p2.city_cards)
+        self.assertFalse(
+            CityCard("Algiers") not in p1.city_cards)
+        self.assertFalse(p1.give_knowledge(
             CityCard("Karachi"), p2))
         self.assertFalse(p1.give_knowledge(
             CityCard("San Francisco"), p2))
-        self.assertTrue(p2.give_knowledge(
+        self.assertFalse(p2.give_knowledge(
             CityCard("Algiers"), p1))
-        self.assertTrue(p2.give_knowledge(
+        self.assertFalse(p2.give_knowledge(
             CityCard("Chennai"), p1))
-
-    # def test_take_knowledge(self):
-    #     p2 = TestPlayer.get_test_player()
-    #     p1 = TestPlayer.get_second_test_player()
-    #     self.assertTrue(p1.take_knowledge(
-    #         CityCard("Algiers", CITY_LIST["Algiers"]), p2))
-    #     self.assertTrue(
-    #         CityCard("Algiers", CITY_LIST["Algiers"]) in p1.city_cards)
-    #     self.assertTrue(
-    #         CityCard("Algiers", CITY_LIST["Algiers"]) not in p2.city_cards)
-    #     self.assertFalse(p1.take_knowledge(
-    #         CityCard("Algiers", CITY_LIST["Algiers"]), p2))
-    #     self.assertTrue(p1.take_knowledge(
-    #         CityCard("Karachi", CITY_LIST["Karachi"]), p2))
-    #     self.assertFalse(p1.take_knowledge(
-    #         CityCard("San Francisco", CITY_LIST["San Francisco"]), p2))
-    #     self.assertTrue(p2.take_knowledge(
-    #         CityCard("Algiers", CITY_LIST["Algiers"]), p1))
-    #     self.assertTrue(p2.take_knowledge(
-    #         CityCard("Chennai", CITY_LIST["Chennai"]), p1))
+        self.assertTrue(p2.give_knowledge(CityCard("Atlanta"), p1))
+        self.assertTrue(CityCard("Atlanta") not in p2.city_cards)
+        self.assertTrue(CityCard("Atlanta") in p1.city_cards)
+        self.assertTrue(p1.give_knowledge(CityCard("Atlanta"), p2))
+        self.assertTrue(CityCard("Atlanta") not in p1.city_cards)
+        self.assertTrue(CityCard("Atlanta") in p2.city_cards)
 
     def test_add_card(self):
         p = TestPlayer.get_test_player()

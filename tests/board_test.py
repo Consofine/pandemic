@@ -67,6 +67,14 @@ class TestAction:
     def get_treat_disease(self, color: str):
         return {"action": {"name": TREAT_DISEASE, "args": {"color": color}}}
 
+    @classmethod
+    def get_share_knowledge(self, city_card: str, player_to: str, player_from: str):
+        return {"action": {"name": SHARE_KNOWLEDGE, "args": {"city_card": city_card, "player_to": player_to, "player_from": player_from}}}
+
+    @classmethod
+    def get_discover_cure(self, city_cards: List[str], color: str):
+        return {"action": {"name": DISCOVER_CURE, "args": {"city_cards": city_cards, "color": color}}}
+
 
 class TestBoardMethods(unittest.TestCase):
     def test_board_init(self):
@@ -138,12 +146,12 @@ class TestBoardMethods(unittest.TestCase):
         b = TestBoard.get_test_board()
         self.assertFalse(b.treat_disease("Potato Stew"))
         self.assertFalse(b.treat_disease(RED))
-        b.active_player.current_city.add_single_disease(BLUE)
+        b.active_player.current_city.add_single_disease(b.cities, BLUE)
         self.assertTrue(b.treat_disease(BLUE))
         self.assertFalse(b.treat_disease(BLUE))
         self.assertEqual(b.active_player.current_city.disease_count[BLUE], 0)
-        b.active_player.current_city.add_epidemic_disease(RED)
-        b.active_player.current_city.add_epidemic_disease(BLUE)
+        b.active_player.current_city.add_epidemic_disease(b.cities, RED)
+        b.active_player.current_city.add_epidemic_disease(b.cities, BLUE)
         self.assertEqual(
             b.active_player.current_city.disease_count[RED], MAX_DISEASE_COUNT)
         p = b.active_player
@@ -161,10 +169,10 @@ class TestBoardMethods(unittest.TestCase):
         p2 = b.get_player("playertwosid")
         p1.add_card(CityCard("Paris"))
         p2.add_card(CityCard("Algiers"))
-        self.assertTrue(b.share_knowledge(CityCard("Paris"), p2, p1))
         self.assertFalse(b.share_knowledge(CityCard("Paris"), p2, p1))
-        self.assertTrue(b.share_knowledge(CityCard("Algiers"), p1, p2))
+        self.assertTrue(b.share_knowledge(CityCard("Atlanta"), p2, p1))
         self.assertFalse(b.share_knowledge(CityCard("Algiers"), p1, p2))
+        self.assertTrue(b.share_knowledge(CityCard("Atlanta"), p1, p2))
 
     def test_discover_cure(self):
         b = TestBoard.get_test_board()
@@ -197,9 +205,11 @@ class TestBoardMethods(unittest.TestCase):
             len(b.card_manager.infection_card_deck), len(CITY_LIST.keys()))
         self.assertEqual(City.outbreaks_occurred, 0)
         if len(cards) == 1:
+            self.assertEqual(b.infection_manager.level, 2)
             self.assertEqual(b.infection_manager.rate, 2)
         elif not cards:
-            self.assertEqual(b.infection_manager.rate, 3)
+            self.assertEqual(b.infection_manager.level, 3)
+            self.assertEqual(b.infection_manager.rate, 2)
 
     def test_draw_infection_cards_and_place_cubes(self):
         b = TestBoard.get_test_board()
@@ -215,161 +225,6 @@ class TestBoardMethods(unittest.TestCase):
         b.draw_infection_cards_and_place_cubes()
         self.assertEqual((DISEASE_CUBE_LIMIT * 4) -
                          sum(b.disease_manager.diseases_remaining.values()), 5)
-
-    def test_take_action_move_adjacent(self):
-        b = TestBoard.get_new_board()
-        self.assertTrue(b.take_action(TestAction.get_move_adjacent("Chicago")))
-        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 1)
-        self.assertEqual(b.active_player.current_city, b.get_city("Chicago"))
-        self.assertFalse(b.take_action(
-            TestAction.get_move_adjacent("Manila")))
-        self.assertFalse(b.take_action(
-            TestAction.get_move_adjacent("Hot Potato")))
-        self.assertEqual(b.active_player.current_city, b.get_city("Chicago"))
-        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 1)
-        self.assertTrue(b.take_action(
-            TestAction.get_move_adjacent("Montreal")))
-        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 2)
-        self.assertEqual(b.active_player.current_city, b.get_city("Montreal"))
-        self.assertTrue(b.take_action(
-            TestAction.get_move_adjacent("New York")))
-        self.assertTrue(b.take_action(TestAction.get_move_adjacent("London")))
-        self.assertFalse(b.take_action(TestAction.get_move_adjacent("Essen")))
-
-    def test_take_action_move_direct_flight(self):
-        b = TestBoard.get_test_board()
-        self.assertTrue(b.take_action(
-            TestAction.get_move_direct_flight("Tokyo")))
-        self.assertEqual(b.active_player.current_city, b.get_city("Tokyo"))
-        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 1)
-        self.assertFalse(b.take_action(
-            TestAction.get_move_direct_flight("Tokyo")))
-        self.assertEqual(b.active_player.current_city, b.get_city("Tokyo"))
-        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 1)
-        self.assertTrue(b.take_action(
-            TestAction.get_move_direct_flight("Chicago")))
-        self.assertEqual(b.active_player.current_city, b.get_city("Chicago"))
-        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 2)
-        self.assertTrue(b.take_action(
-            TestAction.get_move_direct_flight("Atlanta")))
-        self.assertEqual(b.active_player.current_city, b.get_city("Atlanta"))
-        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 3)
-
-    def test_take_action_move_charter_flight(self):
-        b = TestBoard.get_test_board()
-        self.assertTrue(b.take_action(
-            TestAction.get_move_charter_flight("Atlanta", "Montreal")
-        ))
-        self.assertEqual(b.active_player.current_city, b.get_city("Montreal"))
-        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 1)
-        self.assertTrue(b.take_action(
-            TestAction.get_move_adjacent("Chicago")
-        ))
-        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 2)
-        self.assertFalse(b.take_action(
-            TestAction.get_move_charter_flight("Chicago", "Chicago")
-        ))
-        self.assertEqual(b.active_player.current_city, b.get_city("Chicago"))
-        self.assertTrue(b.take_action(
-            TestAction.get_move_charter_flight("Chicago", "Tehran")
-        ))
-        self.assertEqual(b.active_player.current_city, b.get_city("Tehran"))
-        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 3)
-        self.assertFalse(b.take_action(
-            TestAction.get_move_charter_flight("Chicago", "Tehran")
-        ))
-        self.assertEqual(b.active_player.current_city, b.get_city("Tehran"))
-        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 3)
-        self.assertFalse(b.take_action(
-            TestAction.get_move_charter_flight("Tehran", "Tokyo")
-        ))
-        self.assertTrue(b.take_action(
-            TestAction.get_move_adjacent("Baghdad")
-        ))
-        self.assertEqual(b.active_player.current_city, b.get_city("Baghdad"))
-        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 4)
-
-    def test_take_action_move_shuttle_flight(self):
-        b = TestBoard.get_test_board()
-        self.assertFalse(b.take_action(
-            TestAction.get_move_shuttle_flight("Essen")))
-        self.assertEqual(b.active_player.current_city, b.get_city("Atlanta"))
-        self.assertTrue(b.take_action(TestAction.get_move_adjacent("Chicago")))
-        self.assertFalse(b.take_action(
-            TestAction.get_move_shuttle_flight("Tokyo")))
-        self.assertTrue(b.take_action(
-            TestAction.get_move_adjacent("San Francisco")))
-        self.assertTrue(b.take_action(
-            TestAction.get_build_research_station("San Francisco")))
-        self.assertTrue(b.take_action(
-            TestAction.get_move_shuttle_flight("Atlanta")))
-        self.assertEqual(b.active_player.current_city, b.get_city("Atlanta"))
-        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 4)
-
-    def test_take_action_build_research_station(self):
-        b = TestBoard.get_test_board()
-        self.assertFalse(b.take_action(
-            TestAction.get_build_research_station("Atlanta")))
-        self.assertFalse(b.take_action(
-            TestAction.get_build_research_station("Tehran")))
-        self.assertTrue(b.take_action(TestAction.get_move_adjacent("Chicago")))
-        self.assertTrue(b.take_action(
-            TestAction.get_build_research_station("Chicago")))
-        self.assertTrue(b.take_action(
-            TestAction.get_move_adjacent("San Francisco")))
-        self.assertFalse(b.take_action(
-            TestAction.get_build_research_station("Karachi")))
-        self.assertFalse(b.get_city("Karachi").has_research_station)
-        self.assertTrue(b.take_action(
-            TestAction.get_build_research_station("San Francisco")))
-        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 4)
-        self.assertEqual(len(b.active_player.city_cards), 2)
-
-    def test_take_action_treat_disease(self):
-        """
-        NOTE: this ignores the DiseaseManager etc. Point isn't to test that
-        functionality here, so I'm not gonna have this method change the disease
-        counts and everything.
-        """
-        b = TestBoard.get_test_board()
-        b.get_city("Atlanta").add_epidemic_disease(BLUE)
-        b.get_city("Atlanta").add_single_disease(GREY)
-        b.get_city("Chicago").add_epidemic_disease(RED)
-        b.get_city("Chicago").add_single_disease(BLUE)
-        b.get_city("San Francisco").add_single_disease(RED)
-        b.get_city("San Francisco").add_single_disease(RED)
-        self.assertTrue(b.take_action(TestAction.get_treat_disease(BLUE)))
-        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 1)
-        self.assertEqual(
-            b.get_city(STARTING_CITY).disease_count[BLUE], MAX_DISEASE_COUNT - 1)
-        self.assertEqual(b.get_city(STARTING_CITY).disease_count[GREY], 1)
-        self.assertEqual(b.get_city(
-            "Chicago").disease_count[RED], MAX_DISEASE_COUNT)
-        self.assertEqual(b.get_city(
-            "Chicago").disease_count[BLUE], 1)
-        self.assertTrue(b.take_action(TestAction.get_move_adjacent("Chicago")))
-        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 2)
-        self.assertTrue(b.take_action(TestAction.get_treat_disease(BLUE)))
-        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 3)
-        self.assertEqual(b.get_city("Chicago").disease_count[BLUE], 0)
-        self.assertEqual(b.get_city(
-            "Chicago").disease_count[RED], MAX_DISEASE_COUNT)
-        self.assertTrue(b.take_action(TestAction.get_treat_disease(RED)))
-        self.assertEqual(b.active_player.actions_left, MAX_ACTIONS - 4)
-        self.assertEqual(b.get_city(
-            "Chicago").disease_count[RED], MAX_DISEASE_COUNT - 1)
-
-        # MORE TESTS
-        b = TestBoard.get_curable_board()
-        b.get_city("Atlanta").add_epidemic_disease(BLUE)
-        # also check that it doesn't trigger outbreak with different colors
-        self.assertFalse(b.get_city("Atlanta").add_epidemic_disease(RED))
-        self.assertTrue(b.discover_cure(b.active_player.city_cards, BLUE))
-        self.assertTrue(b.take_action(TestAction.get_treat_disease(BLUE)))
-        self.assertEqual(b.get_city("Atlanta").disease_count[BLUE], 0)
-        self.assertTrue(b.take_action(TestAction.get_treat_disease(RED)))
-        self.assertEqual(b.get_city(
-            "Atlanta").disease_count[RED], MAX_DISEASE_COUNT - 1)
 
 
 if __name__ == '__main__':

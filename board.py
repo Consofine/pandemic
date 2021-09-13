@@ -1,11 +1,9 @@
-from typing import Counter, List, Union
+from typing import Any, Counter, List, Union
 import random
-import logging
+import json
 import functools
-from enum import Enum
 from custom_exceptions import GameEndedError, InvalidGametypeError, InvalidOperationError
 from constants import *
-from util import validate_keys
 
 
 class Role:
@@ -33,23 +31,25 @@ class City:
         self.disease_count: dict = dict.fromkeys(
             [RED, BLUE, YELLOW, GREY], 0)
         self.has_research_station: bool = False
-        self.connected_cities: Union[List, List[City]] = []
+        self.connected_cities: List[str] = []
 
     def __eq__(self, other):
         """
         (in)Equality based on whether cities share name
         """
+        if isinstance(other, str):
+            return self.name == other
         if not isinstance(other, City) and not isinstance(other, Card):
             return False
         return self.name == other.name and self.color == other.color
 
     def __str__(self):
-        return "{}: {}. Connections to: {}".format(self.name, self.color, [c.name for c in self.connected_cities])
+        return "{}: {}. Connections to: {}".format(self.name, self.color, [self.connected_cities])
 
     def __repr__(self) -> str:
         return self.__str__()
 
-    def set_connected_cities(self, cities: List['City']):
+    def set_connected_cities(self, cities: List[str]):
         """
         Stores list of cities as being adjacent to this
         Args:
@@ -57,7 +57,7 @@ class City:
         """
         self.connected_cities = cities
 
-    def add_single_disease(self, color, prior_outbreaks: Union[List, List['City']] = []) -> bool:
+    def add_single_disease(self, city_list: dict, color, prior_outbreaks: List[str] = []) -> bool:
         """
         Adds one disease cube to this city. If this city already has MAX_DISEASE_COUNT
         disease cubes of given color, doesn't increase this city's count but triggers
@@ -71,11 +71,11 @@ class City:
         if self.disease_count[color] < MAX_DISEASE_COUNT:
             self.disease_count[color] += 1
             return False
-        prior_outbreaks.append(self)
-        self.trigger_outbreak(color, prior_outbreaks)
+        prior_outbreaks.append(self.name)
+        self.trigger_outbreak(city_list, color, prior_outbreaks)
         return True
 
-    def add_epidemic_disease(self, color) -> bool:
+    def add_epidemic_disease(self, city_list: dict, color) -> bool:
         """
         Adds three disease cubes to this city as part of an outbreak. If this city already has any
         disease cubes of the given color, then this city's disease_count for that color is capped at
@@ -89,10 +89,10 @@ class City:
             self.disease_count[color] = MAX_DISEASE_COUNT
             return False
         self.disease_count[color] = MAX_DISEASE_COUNT
-        self.trigger_outbreak(color, [])
+        self.trigger_outbreak(city_list, color, [])
         return True
 
-    def trigger_outbreak(self, color, prior_outbreaks: Union[List, List['City']]) -> None:
+    def trigger_outbreak(self, city_list: dict, color, prior_outbreaks: List[str]) -> None:
         """
         Adds one disease cube of given color to each connected city. Prevents infinite loops / chaining
         back to cities that have already been hit, but allows for chaining otherwise
@@ -101,9 +101,10 @@ class City:
             prior_outbreaks - array to track cities that have been hit by this outbreak chain
         """
         City.outbreaks_occurred += 1
-        for city in self.connected_cities:
-            if city not in prior_outbreaks:
-                city.add_single_disease(color, prior_outbreaks)
+        for city_name in self.connected_cities:
+            if city_name not in prior_outbreaks:
+                city_list[city_name].add_single_disease(
+                    city_list, color, prior_outbreaks)
 
     def treat_single_disease(self, color) -> bool:
         """
@@ -221,6 +222,9 @@ class Player:
             return False
         return self.player_id == other.player_id
 
+    def __str__(self):
+        return "Player with ID {}. Active: {}, current city: {}".format(self.player_id, self.is_active, self.current_city)
+
     def move_adjacent(self, city: City) -> bool:
         """
         Move player to an adjacent City and decrements number of actions left.
@@ -287,6 +291,8 @@ class Player:
         Returns:
             bool - true if card successfully given, false otherwise
         """
+        if other_player.current_city != self.current_city or city_card != self.current_city:
+            return False
         if self.subtract_card(city_card):
             if other_player.add_card(city_card):
                 return True
@@ -295,24 +301,6 @@ class Player:
                 # add back in so it's not lost.
                 self.add_card(city_card)
         return False
-
-    # def take_knowledge(self, city_card: CityCard, other_player: 'Player') -> bool:
-    #     """
-    #     If city_card is in other_player's hand, takes that card from them and adds it to our
-    #     hand.
-    #     Args:
-    #         city_card - CityCard that we want to take from the other player
-    #         other_player - Player from whom we want to take the card
-    #     Return:
-    #         bool - true if successfully taken, false otherwise
-    #     """
-    #     if other_player.subtract_card(city_card):
-    #         if self.add_card(city_card):
-    #             return True
-    #         else:
-    #             # we took a card from the other player but can't hold it, so give it back
-    #             other_player.add_card(city_card)
-    #     return False
 
     def add_card(self, city_card: CityCard) -> bool:
         """
@@ -679,21 +667,6 @@ class DiseaseManager:
         self.diseases_remaining[color] += number
 
 
-class ActionList(Enum):
-    """
-    Enum holding the 8 standard actions that a player can take on their turn.
-    TODO: make this include player-specific actions
-    """
-    move_adjacent = MOVE_ADJACENT
-    move_direct_flight = MOVE_DIRECT_FLIGHT
-    move_charter_flight = MOVE_CHARTER_FLIGHT
-    move_shuttle_flight = MOVE_SHUTTLE_FLIGHT
-    build_research_station = BUILD_RESEARCH_STATION
-    treat_disease = TREAT_DISEASE
-    share_knowledge = SHARE_KNOWLEDGE
-    discover_cure = DISCOVER_CURE
-
-
 class Board:
     """
     Holds game state, list of cities, and players (with their positions)
@@ -712,28 +685,7 @@ class Board:
                               for p in player_ids}
         self.set_active_player(self.players[player_ids[0]])
 
-        self.action_mappings = {
-            ActionList.move_adjacent: self.move_adjacent,
-            ActionList.move_direct_flight: self.move_direct_flight,
-            ActionList.move_charter_flight: self.move_charter_flight,
-            ActionList.move_shuttle_flight: self.move_shuttle_flight,
-            ActionList.build_research_station: self.build_research_station,
-            ActionList.treat_disease: self.treat_disease,
-            ActionList.share_knowledge: self.share_knowledge,
-            ActionList.discover_cure: self.discover_cure,
-        }
-        self.arg_mappings = {
-            ActionList.move_adjacent: {"to_city": City},
-            ActionList.move_direct_flight: {"city_card": CityCard},
-            ActionList.move_charter_flight: {"city_card": CityCard, "to_city": City},
-            ActionList.move_shuttle_flight: {"to_city": City},
-            ActionList.build_research_station: {"city_card": CityCard},
-            ActionList.treat_disease: {"color": str},
-            ActionList.share_knowledge: {"city_card": CityCard, "player_to": Union[Player, str], "player_from": Union[Player, str]},
-            ActionList.discover_cure: {"city_cards": List[CityCard], "color": str},
-        }
-
-    def set_active_player(self, player: Player) -> None:
+    def set_active_player(self, player: Union[str, Player]) -> None:
         """
         Set the active player to be the given player object. Also, set all other
         players' active statuses to False, and set this player's active status to True.
@@ -758,36 +710,45 @@ class Board:
         """
         cities = {c: City(c) for c in CITY_LIST.keys()}
         for city in cities.values():
-            city.set_connected_cities([cities[c]
-                                      for c in CITY_CONNECTIONS[city.name]])
+            city.set_connected_cities(CITY_CONNECTIONS[city.name])
         cities[starting_city].add_research_station()
         return cities
 
-    def take_action(self, msg):
-        """
-        Fields a JSON message from a player informing the board which action they'd like to take.
-        Keys for the action args are stored in JSON msg['action_args'], along with respective values.
-        """
-        if not self.active_player.has_actions_left():
-            return False
-        try:
-            act = ActionList(msg["action"]["name"])
-            method = self.action_mappings[act]
-            arg_keys = self.arg_mappings[act]
-            args = [msg["action"]["args"][key] for key in arg_keys.keys()]
-            success = self.validate_keys(
-                args, list(arg_keys.values())) and method(*args)
-            if not success:
-                raise InvalidOperationError("Action failed.")
-            self.active_player.dec_actions_left()
-            return True
-        except InvalidOperationError as e:
-            #logging.error(e.message, msg, self)
-            pass
-        except KeyError:
-            #logging.error("Cannot find key in msg or action call.", msg)
-            pass
-        return False
+    # def use_ability(self, msg):
+    #     """
+    #     Similar to take_action in that it fields a JSON message informing the board what to do.
+    #     This method is for handling non-standard actions, such as:
+    #     - Role-specific abilities
+    #     - Card-specific abilities
+    #     - Miscellaneous actions like discarding or ending turn.
+    #     """
+    #     pass
+
+    # def take_action(self, msg):
+    #     """
+    #     Fields a JSON message from a player informing the board which action they'd like to take.
+    #     Keys for the action args are stored in JSON msg['action_args'], along with respective values.
+    #     """
+    #     if not self.active_player.has_actions_left():
+    #         return False
+    #     try:
+    #         act = ActionList(msg["action"]["name"])
+    #         method = self.action_mappings[act]
+    #         arg_keys = self.arg_mappings[act]
+    #         args = [msg["action"]["args"][key] for key in arg_keys.keys()]
+    #         success = self.validate_keys(
+    #             args, list(arg_keys.values())) and method(*args)
+    #         if not success:
+    #             raise InvalidOperationError("Action failed.")
+    #         self.active_player.dec_actions_left()
+    #         return True
+    #     except InvalidOperationError as e:
+    #         #logging.error(e.message, msg, self)
+    #         pass
+    #     except KeyError:
+    #         #logging.error("Cannot find key in msg or action call.", msg)
+    #         pass
+    #     return False
 
     def move_adjacent(self, to_city: City):
         return self.active_player.move_adjacent(to_city)
@@ -828,14 +789,10 @@ class Board:
             return success
         return self.active_player.current_city.treat_single_disease(color)
 
-    def share_knowledge(self, city_card: CityCard, player_to: Union[str, Player], player_from: Union[str, Player]):
+    def share_knowledge(self, city_card: CityCard, player_to: Player, player_from: Player):
         """
         Share knowledge, giving a card from player_from to player_to.
         """
-        if isinstance(player_from, str):
-            player_from = self.get_player(player_from)
-        if isinstance(player_to, str):
-            player_to = self.get_player(player_to)
         if not (player_to == self.active_player or player_from == self.active_player):
             return False
         return player_from.give_knowledge(city_card, player_to)
@@ -847,10 +804,6 @@ class Board:
                 self.active_player.discover_cure(color, city_cards)
                 return True
         return False
-
-    def use_ability(self):
-        # TODO
-        return
 
     def move_to_next_player(self):
         """
@@ -875,7 +828,7 @@ class Board:
             self.infection_manager.increase_level()
             bottom_card = self.card_manager.handle_epidemic()
             self.cities[bottom_card.name].add_epidemic_disease(
-                bottom_card.color)
+                self.cities, bottom_card.color)
             self.disease_manager.update_disease_counts(
                 list(self.cities.values()))
         for _ in range(City.outbreaks_occurred):
@@ -892,20 +845,35 @@ class Board:
         infection_cards = self.card_manager.draw_infection_cards(
             self.infection_manager.rate)
         for ic in infection_cards:
-            self.cities[ic.name].add_single_disease(ic.color)
+            self.cities[ic.name].add_single_disease(self.cities, ic.color)
         for _ in range(City.outbreaks_occurred):
             self.infection_manager.increase_outbreak_count()
         self.disease_manager.update_disease_counts(
             list(self.cities.values()))
         City.outbreaks_occurred = 0
 
-    def end_of_actions(self):
+    def dec_active_player_actions(self):
+        """
+        Calls into active player's dec_actions_left method.
+        """
+        self.active_player.dec_actions_left()
+
+    def discard(self, city_cards: List[CityCard], player: Player):
+        error = False
+        for c in city_cards:
+            if not player.subtract_card(c):
+                error = True
+        return error
+
+    def check_end_of_actions(self):
         """
         Draw city cards and give them to the active player. Draw
         infection cards and place disease cubes on respective cities.
         Handle epidemics if one occurs while drawing city cards.
         TODO: handle case where user has too many cards
         """
+        if self.active_player.has_actions_left():
+            return
         self.active_player.city_cards += self.card_manager.draw_city_cards()
         self.draw_infection_cards_and_place_cubes()
         # if len(self.active_player.city_cards) <= MAX_HAND_COUNT:
@@ -924,16 +892,3 @@ class Board:
         if not player_id in self.players.keys():
             raise InvalidOperationError("Invalid player id.")
         return self.players[player_id]
-
-    def validate_keys(self, keys, types):
-        try:
-            for x in range(len(keys)):
-                if types[x] == Player:
-                    keys[x] = self.get_player(keys[x])
-                elif types[x] == City:
-                    keys[x] = self.get_city(keys[x])
-                else:
-                    keys[x] = types[x](keys[x])
-        except ValueError:
-            return False
-        return True
