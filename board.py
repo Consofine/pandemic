@@ -716,54 +716,32 @@ class Board:
         cities[starting_city].add_research_station()
         return cities
 
-    # def use_ability(self, msg):
-    #     """
-    #     Similar to take_action in that it fields a JSON message informing the board what to do.
-    #     This method is for handling non-standard actions, such as:
-    #     - Role-specific abilities
-    #     - Card-specific abilities
-    #     - Miscellaneous actions like discarding or ending turn.
-    #     """
-    #     pass
-
-    # def take_action(self, msg):
-    #     """
-    #     Fields a JSON message from a player informing the board which action they'd like to take.
-    #     Keys for the action args are stored in JSON msg['action_args'], along with respective values.
-    #     """
-    #     if not self.active_player.has_actions_left():
-    #         return False
-    #     try:
-    #         act = ActionList(msg["action"]["name"])
-    #         method = self.action_mappings[act]
-    #         arg_keys = self.arg_mappings[act]
-    #         args = [msg["action"]["args"][key] for key in arg_keys.keys()]
-    #         success = self.validate_keys(
-    #             args, list(arg_keys.values())) and method(*args)
-    #         if not success:
-    #             raise InvalidOperationError("Action failed.")
-    #         self.active_player.dec_actions_left()
-    #         return True
-    #     except InvalidOperationError as e:
-    #         #logging.error(e.message, msg, self)
-    #         pass
-    #     except KeyError:
-    #         #logging.error("Cannot find key in msg or action call.", msg)
-    #         pass
-    #     return False
-
     def move_adjacent(self, to_city: City):
+        """
+        Move to a neighboring city (from active player's current city)
+        """
         return self.active_player.move_adjacent(to_city)
 
     def move_direct_flight(self, city_card: CityCard):
+        """
+        Play a city card and move to the city matching that card.
+        """
         city = self.get_city(city_card.name)
         return self.active_player.move_direct_flight(city)
 
     def move_charter_flight(self, city_card: CityCard, to_city: City):
+        """
+        Play a city card matching the active player's current city and fly to
+        anywhere you want.
+        """
         cur_city = CityCard(self.get_city(city_card.name).name)
         return self.active_player.move_charter_flight(cur_city, to_city)
 
     def move_shuttle_flight(self, to_city: City):
+        """
+        Move from one city with a research station (active player's current city)
+        to another city with a research station.
+        """
         return self.active_player.move_shuttle_flight(to_city)
 
     def build_research_station(self, city_card: CityCard):
@@ -800,6 +778,11 @@ class Board:
         return player_from.give_knowledge(city_card, player_to)
 
     def discover_cure(self, city_cards: List[CityCard], color: str) -> bool:
+        """
+        If active player has all the provided city cards and there are enough
+        of them to cure a disease of the given color and the active player is 
+        in a city with a research station, cure disease.
+        """
         if self.active_player.can_discover_cure(color, city_cards):
             if not self.disease_manager.is_cured(color):
                 self.disease_manager.cure_disease(color)
@@ -861,6 +844,10 @@ class Board:
         self.active_player.dec_actions_left()
 
     def discard(self, city_cards: List[CityCard], player: Player):
+        """
+        Discard the given city cards from the given player's hand, if
+        they possess these cards already.
+        """
         error = False
         for c in city_cards:
             if not player.subtract_card(c):
@@ -882,6 +869,9 @@ class Board:
         self.move_to_next_player()
 
     def get_city(self, city_name: Union[str, City]) -> City:
+        """
+        Get City object from the given city name (i.e. probably the city's name field).
+        """
         if isinstance(city_name, City):
             return city_name
         if not city_name in self.cities:
@@ -889,6 +879,9 @@ class Board:
         return self.cities[city_name]
 
     def get_player(self, player_id: Union[str, Player]) -> Player:
+        """
+        Get player object from the given player id (i.e. probably the player's player_id field).
+        """
         if isinstance(player_id, Player):
             return player_id
         if not player_id in self.players.keys():
