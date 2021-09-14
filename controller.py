@@ -98,8 +98,11 @@ class Controller:
         Returns:
             str - JSON-dumped representation of the current board
         """
-        msg = json.loads(msg)
         b = Serializer.load_board(game_id)
+        try:
+            msg = json.loads(msg)
+        except ValueError:
+            return Serializer.print_board(b, True)
         error = None
         if ACTION in msg or ABILITY in msg:
             try:
@@ -115,6 +118,7 @@ class Controller:
                 if cmd_type == ACTION:
                     b.dec_active_player_actions()
                     b.check_end_of_actions()
+
             except Exception as e:
                 error = True
         Serializer.save_board(b, game_id)

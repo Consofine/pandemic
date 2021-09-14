@@ -1,4 +1,4 @@
-from typing import Any, Counter, List, Union
+from typing import Any, Counter, List, Union, Dict
 import random
 import json
 import functools
@@ -28,7 +28,7 @@ class City:
             raise ValueError("Invalid city name supplied to city constructor.")
         self.name: str = name
         self.color = CITY_LIST[name]
-        self.disease_count: dict = dict.fromkeys(
+        self.disease_count: Dict[str, int] = dict.fromkeys(
             [RED, BLUE, YELLOW, GREY], 0)
         self.has_research_station: bool = False
         self.connected_cities: List[str] = []
@@ -57,7 +57,7 @@ class City:
         """
         self.connected_cities = cities
 
-    def add_single_disease(self, city_list: dict, color, prior_outbreaks: List[str] = []) -> bool:
+    def add_single_disease(self, city_list: Dict[str, 'City'], color, prior_outbreaks: List[str] = []) -> bool:
         """
         Adds one disease cube to this city. If this city already has MAX_DISEASE_COUNT
         disease cubes of given color, doesn't increase this city's count but triggers
@@ -75,7 +75,7 @@ class City:
         self.trigger_outbreak(city_list, color, prior_outbreaks)
         return True
 
-    def add_epidemic_disease(self, city_list: dict, color) -> bool:
+    def add_epidemic_disease(self, city_list: Dict[str, 'City'], color) -> bool:
         """
         Adds three disease cubes to this city as part of an outbreak. If this city already has any
         disease cubes of the given color, then this city's disease_count for that color is capped at
@@ -92,7 +92,7 @@ class City:
         self.trigger_outbreak(city_list, color, [])
         return True
 
-    def trigger_outbreak(self, city_list: dict, color, prior_outbreaks: List[str]) -> None:
+    def trigger_outbreak(self, city_list: Dict[str, 'City'], color, prior_outbreaks: List[str]) -> None:
         """
         Adds one disease cube of given color to each connected city. Prevents infinite loops / chaining
         back to cities that have already been hit, but allows for chaining otherwise
@@ -573,9 +573,11 @@ class DiseaseManager:
     """
 
     def __init__(self):
-        self.diseases_cured = dict.fromkeys(COLORS, False)
-        self.diseases_eradicated = dict.fromkeys(COLORS, False)
-        self.diseases_remaining = dict.fromkeys(COLORS, DISEASE_CUBE_LIMIT)
+        self.diseases_cured: Dict[str, bool] = dict.fromkeys(COLORS, False)
+        self.diseases_eradicated: Dict[str,
+                                       bool] = dict.fromkeys(COLORS, False)
+        self.diseases_remaining: Dict[str, int] = dict.fromkeys(
+            COLORS, DISEASE_CUBE_LIMIT)
 
     def update_disease_counts(self, cities_list: List[City]) -> None:
         """
@@ -589,7 +591,7 @@ class DiseaseManager:
                     raise GameEndedError("Ran out of disease cubes.")
                 self.diseases_remaining[color] -= city.disease_count[color]
 
-    def get_remaining_diseases(self, color: str = None) -> dict:
+    def get_remaining_diseases(self, color: str = None) -> Union[Dict[str, int], int]:
         """
         Returns the dict of remaining diseases, or the count remaining for a specific disease color
         if provided
@@ -678,11 +680,11 @@ class Board:
         self.infection_manager: InfectionManager = InfectionManager()
         self.disease_manager: DiseaseManager = DiseaseManager()
         self.card_manager: CardManager = CardManager()
-        self.cities: dict = self.init_cities(starting_city)
+        self.cities: Dict[str, City] = self.init_cities(starting_city)
         self.player_ids = player_ids
         # create player list and set active player
-        self.players: dict = {p: Player(p, Role(), self.get_city(starting_city))
-                              for p in player_ids}
+        self.players: Dict[str, Player] = {p: Player(p, Role(), self.get_city(starting_city))
+                                           for p in player_ids}
         self.set_active_player(self.players[player_ids[0]])
 
     def set_active_player(self, player: Union[str, Player]) -> None:
@@ -701,7 +703,7 @@ class Board:
                 p.actions_left = 0
 
     @classmethod
-    def init_cities(self, starting_city: str) -> dict:
+    def init_cities(self, starting_city: str) -> Dict[str, City]:
         """
         Using cities and connected cities information from constants file,
         creates a dict holding all cities with all of their related data
@@ -758,13 +760,13 @@ class Board:
         return self.active_player.move_direct_flight(city)
 
     def move_charter_flight(self, city_card: CityCard, to_city: City):
-        cur_city = self.get_city(city_card.name)
+        cur_city = CityCard(self.get_city(city_card.name).name)
         return self.active_player.move_charter_flight(cur_city, to_city)
 
     def move_shuttle_flight(self, to_city: City):
         return self.active_player.move_shuttle_flight(to_city)
 
-    def build_research_station(self, city_card: str):
+    def build_research_station(self, city_card: CityCard):
         """
         Build a research station in the active player's current city, or 
         in the city corresponding to the supplied city name if given. Building
