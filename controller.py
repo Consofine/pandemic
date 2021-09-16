@@ -4,7 +4,7 @@ from typing import List
 from board import Board, CityCard, City, Player
 from enums import ActionList, AbilityList
 from constants import ACTION, ABILITY
-from custom_exceptions import InvalidOperationError
+from custom_exceptions import GameEndedError, InvalidOperationError
 
 
 class Serializer:
@@ -32,12 +32,12 @@ class Serializer:
             pickle.dump(board, f)
 
     @classmethod
-    def print_board(self, board: Board, error: bool = None) -> str:
+    def print_board(self, board: Board, error: bool = None, game_over: bool = False) -> str:
         """
         Convenience method for turning a Board object into a JSON string
         which we can then send to the clients.
         """
-        return json.dumps({"board": board, "error": error}, default=lambda x: x.__dict__)
+        return json.dumps({"board": board, "error": error, "game_over": game_over}, default=lambda x: x.__dict__)
 
 
 class Controller:
@@ -104,6 +104,7 @@ class Controller:
         except ValueError:
             return Serializer.print_board(b, True)
         error = None
+        gameOver = False
         if ACTION in msg or ABILITY in msg:
             try:
                 cmd_type = ACTION if ACTION in msg else ABILITY
@@ -118,11 +119,12 @@ class Controller:
                 if cmd_type == ACTION:
                     b.dec_active_player_actions()
                     b.check_end_of_actions()
-
+            except GameEndedError:
+                gameOver = True
             except Exception as e:
                 error = True
         Serializer.save_board(b, game_id)
-        return Serializer.print_board(b, error)
+        return Serializer.print_board(b, error, gameOver)
 
     def validate_keys(self, board: Board, keys: List, types: List):
         try:

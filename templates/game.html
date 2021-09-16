@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+
+{% block header %}
+    <div class="lobbyInfo">
+        <div class="row">
+            <h1> Game code: {{ state['lobby_id'] }}</h1>
+        <p class="lead">Number of players in lobby: <span id="playerNum"></span>/4</p>
+        <div class="row text-center">
+            <div class="card">
+                <div class="card-body">
+                    <ul id="playerList" class="list-group list-group-flush">
+                    </ul>
+                    <div>
+                        <button class="start-button btn btn-primary disabled">Start Game</button>
+                    </div>
+                    <small class="sb-msg disabled"></small>
+                </div>
+            </div>
+        </div>
+
+    </div>
+{% endblock %}
+{% block content %}
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js" integrity="sha512-q/dWJ3kcmjBLU4Qc47E4A9kTB4m3wuTY7vkFJDTZKjTs8jhyGQnaUrxa0Ytd0ssMZhbNua9hE+E7Qv1j+DyZwA==" crossorigin="anonymous"></script>
+<script type="text/javascript">
+const socket = io();
+var uuid = null;
+socket.on('connected', (payload) => {
+    uuid = payload['uuid']
+})
+socket.on('connect', () => {
+    socket.emit('join');
+});
+</script>
+<script src="{{ url_for('static', filename='js/base.js') }}"></script>
+<script src="{{ url_for('static', filename='js/lobby.js') }}"></script>
+
+{% endblock %}

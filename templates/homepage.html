@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+
+{% block header %}
+<p>Join or create game</p>
+{% endblock %}
+
+{% block content %}   
+    <div class="row">
+        <div class="col-6">
+            <div class="card">
+                <div class="card-body">
+                    <a href="{{ url_for('create_lobby') }}">
+                        <button class="btn btn-primary">Start new game</button>
+                    </a>
+                </div>
+            </div>
+        <div class="col-6">
+            <div class="card">
+                <div class="card-body">
+                    <a href="{{ url_for('join_lobby') }}">
+                        <button type="submit" class="btn btn-primary">Join existing game</button>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

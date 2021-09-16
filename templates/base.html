@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<head>
+    <title>{% block title %}{% endblock %} - Flaskr</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-grid.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="{{ url_for('static', filename='js/jquery.min.js') }}"></script>
+</head>
+<body>
+    <nav>
+    <h1>Flaskr</h1>
+    </nav>
+    {% if state and state['error'] %}
+        <div class="alert alert-warning alert-dismissible fade show" role="alert">
+            {{ state['msg']}}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    {% endif %}
+
+    <section class="content">
+    <header>
+        {% block header %}{% endblock %}
+    </header>
+
+    {% block content %}{% endblock %}
+
+    </section>
+    <script src="{{ url_for('static', filename='js/bootstrap.min.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
